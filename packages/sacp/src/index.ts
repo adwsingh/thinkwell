@@ -1,6 +1,7 @@
 // Types
 export type {
   JsonSchema,
+  SchemaProvider,
   McpContext,
   McpServerConfig,
   McpConnectRequest,

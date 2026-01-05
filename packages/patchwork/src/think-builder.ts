@@ -5,6 +5,7 @@ import {
   mcpServer,
   SessionBuilder,
   type JsonSchema,
+  type SchemaProvider,
   type ToolHandler,
 } from "@dherman/sacp";
 
@@ -34,13 +35,18 @@ export class ThinkBuilder<Output> {
   private readonly _mcpHandler: McpOverAcpHandler;
   private _promptParts: string[] = [];
   private _tools: Map<string, ToolDefinition> = new Map();
-  private _outputSchema: JsonSchema | undefined;
+  private _schemaProvider: SchemaProvider<Output> | undefined;
   private _cwd: string | undefined;
   private _systemPrompt: string | undefined;
 
-  constructor(connection: SacpConnection, mcpHandler: McpOverAcpHandler) {
+  constructor(
+    connection: SacpConnection,
+    mcpHandler: McpOverAcpHandler,
+    schema?: SchemaProvider<Output>
+  ) {
     this._connection = connection;
     this._mcpHandler = mcpHandler;
+    this._schemaProvider = schema;
   }
 
   /**
@@ -123,9 +129,14 @@ export class ThinkBuilder<Output> {
    *
    * This generates a return_result tool that the LLM must call
    * to provide the final output.
+   *
+   * @deprecated Use `patchwork.think(schemaOf<T>(schema))` instead to provide a typed schema at construction time.
    */
   outputSchema(schema: JsonSchema): this {
-    this._outputSchema = schema;
+    console.warn(
+      "ThinkBuilder.outputSchema() is deprecated. Use patchwork.think(schemaOf<T>(schema)) instead."
+    );
+    this._schemaProvider = { toJsonSchema: () => schema };
     return this;
   }
 
@@ -191,7 +202,7 @@ export class ThinkBuilder<Output> {
     let result: Output | undefined;
 
     // Add the return_result tool
-    const outputSchema = this._outputSchema ?? { type: "object" };
+    const outputSchema = this._schemaProvider?.toJsonSchema() ?? { type: "object" };
     serverBuilder.tool(
       "return_result",
       "Return the final result",
