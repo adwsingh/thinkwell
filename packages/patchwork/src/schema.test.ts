@@ -1,4 +1,4 @@
-import { describe, it, mock } from "node:test";
+import { describe, it } from "node:test";
 import assert from "node:assert";
 import { schemaOf } from "./schema.js";
 import type { SchemaProvider, JsonSchema } from "@dherman/sacp";
@@ -150,14 +150,6 @@ describe("ThinkBuilder schema integration", () => {
     const outputSchema = provider.toJsonSchema();
 
     assert.deepStrictEqual(outputSchema, schema);
-  });
-
-  it("should handle undefined schema provider gracefully", () => {
-    // Simulate ThinkBuilder's fallback behavior
-    const schemaProvider: SchemaProvider<unknown> | undefined = undefined;
-    const outputSchema = schemaProvider?.toJsonSchema() ?? { type: "object" };
-
-    assert.deepStrictEqual(outputSchema, { type: "object" });
   });
 });
 
