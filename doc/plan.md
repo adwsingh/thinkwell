@@ -53,4 +53,4 @@ Create `examples/` directory with end-to-end examples that demonstrate each sche
 - [x] Investigate conductor bridge implementation
 - [x] Fix `_mcp/message` response format (return raw MCP results)
 - [x] Update MCP protocol version to 2025-03-26
-- [ ] Remove JSON extraction workaround (kept as fallback for robustness)
+- [x] Remove JSON extraction workaround (no longer needed)
