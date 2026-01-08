@@ -139,12 +139,13 @@ export default async function main() {
     console.log("Step 2: Converting UMD wrapper to ESM...");
     const conversion: ModuleConversion = await agent
       .think(ModuleConversionSchema)
-      .text(
-        "Convert this UMD module to an ESM module with a default export. " +
-          "Remove the UMD wrapper boilerplate (the IIFE that checks for exports/define/globalThis). " +
-          "Keep all the internal code intact, just change the module format. " +
-          "The code should end with a default export of the main library object.\n\n"
-      )
+      .text(`
+        Convert this UMD module to an ESM module with a default export.
+        Remove the UMD wrapper boilerplate (the IIFE that checks for exports/define/globalThis).
+        Keep all the internal code intact, just change the module format.
+        The code should end with a default export of the main library object.
+
+      `)
       .display(prettyCode)
       .run();
 
@@ -158,12 +159,13 @@ export default async function main() {
     console.log("Step 3: Extracting function list...");
     const functionList: FunctionList = await agent
       .think(FunctionListSchema)
-      .text(
-        "Extract a list of all top-level function declarations and function expressions " +
-          "assigned to variables in this code. Include the function name, its signature " +
-          "(parameters), and approximate line number. Focus on functions with short " +
-          "(1-2 character) names that appear to be minified.\n\n"
-      )
+      .text(`
+        Extract a list of all top-level function declarations and function expressions
+        assigned to variables in this code. Include the function name, its signature
+        (parameters), and approximate line number. Focus on functions with short
+        (1-2 character) names that appear to be minified.
+
+      `)
       .display(esmCode)
       .run();
 
@@ -198,15 +200,20 @@ export default async function main() {
 
       const batch: FunctionAnalysisBatch = await agent
         .think(FunctionAnalysisBatchSchema)
-        .text(
-          "Analyze each of the following minified functions and suggest better, more descriptive names.\n\n" +
-            "IMPORTANT: For each function, the 'originalName' field in your response must be the EXACT " +
-            "minified name shown in quotes below (e.g., if the function is listed as \"j\", use exactly \"j\" " +
-            "as the originalName, not \"jj\" or any variation).\n\n" +
-            "Functions to analyze:\n" +
-            functionListText +
-            "\n\nHere is the full code for context:\n\n"
-        )
+        .text(`
+          Analyze each of the following minified functions and suggest better, more descriptive names.
+
+          IMPORTANT: For each function, the 'originalName' field in your response must be the EXACT
+          minified name shown in quotes below (e.g., if the function is listed as "j", use exactly "j"
+          as the originalName, not "jj" or any variation).
+
+          Functions to analyze:
+
+          ${functionListText}
+
+          Here is the full code for context:
+
+        `)
         .display(esmCode)
         .run();
 
@@ -265,13 +272,16 @@ export default async function main() {
 
     const renamed: RenamedCode = await agent
       .think(RenamedCodeSchema)
-      .text(
-        "Apply the following renames to the code. Be careful to only rename " +
-          "the function definitions and all their usages, not unrelated identifiers " +
-          "that happen to have the same name:\n\n" +
-          renameList +
-          "\n\nHere is the code:\n\n"
-      )
+      .text(`
+        Apply the following renames to the code. Be careful to only rename
+        the function definitions and all their usages, not unrelated identifiers
+        that happen to have the same name:
+
+        ${renameList}
+
+        Here is the code:
+
+      `)
       .display(esmCode)
       .run();
 
