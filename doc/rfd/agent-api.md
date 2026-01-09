@@ -58,7 +58,7 @@ class Session {
 **Simple case (90% of users):**
 
 ```typescript
-import { Agent } from "@anthropic/patchwork";
+import { Agent } from "@dherman/patchwork";
 
 const agent = await Agent.connect("npx -y @zed-industries/claude-code-acp");
 
