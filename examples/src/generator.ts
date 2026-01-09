@@ -35,9 +35,8 @@
 import { SummarySchema, DocumentAnalysisSchema, TextPassageSchema } from "./generator.schemas.js";
 import * as fs from "fs/promises";
 import Sentiment from "sentiment";
+import DEFAULT_AGENT_CMD from "./claude-code.json" with { type: "json" };
 import { Agent } from "@dherman/patchwork";
-
-const DEFAULT_AGENT_CMD = "npx -y @zed-industries/claude-code-acp";
 
 // =============================================================================
 // Type Definitions (marked with @JSONSchema for schema generation)

@@ -15,14 +15,13 @@
  *   # Or directly with tsx:
  *   npx tsx src/demo.ts
  *
- *   # With a custom conductor command (supports quoted arguments):
- *   CONDUCTOR_CMD='sacp-conductor agent "npx -y @zed-industries/claude-code-acp"' npx tsx src/demo.ts
+ *   # With a custom agent command:
+ *   PATCHWORK_AGENT_CMD='npx -y @zed-industries/claude-code-acp' npx tsx src/demo.ts
  */
 
 
 // Default conductor command using Claude Code ACP
-const DEFAULT_CONDUCTOR_CMD =
-  'sacp-conductor agent "npx -y @zed-industries/claude-code-acp"';
+import DEFAULT_AGENT_CMD from "./claude-code.json" with { type: "json" };
 
 import inline from "./inline.js";
 import zod from './zod.js';
@@ -64,8 +63,8 @@ async function main() {
     console.log("  all       - Run all patterns (default)");
     console.log("");
     console.log("Environment variables:");
-    console.log(`  CONDUCTOR_CMD - Custom conductor command`);
-    console.log(`                  (default: ${DEFAULT_CONDUCTOR_CMD})`);
+    console.log(`  PATCHWORK_AGENT_CMD - Custom agent command`);
+    console.log(`                  (default: ${DEFAULT_AGENT_CMD})`);
     process.exit(1);
   }
 

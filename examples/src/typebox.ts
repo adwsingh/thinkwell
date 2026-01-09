@@ -21,9 +21,8 @@ import { Type, type Static, type TSchema } from "@sinclair/typebox";
 import type { SchemaProvider, JsonSchema } from "@dherman/sacp";
 import * as fs from "fs/promises";
 import Sentiment from "sentiment";
+import DEFAULT_AGENT_CMD from "./claude-code.json" with { type: "json" };
 import { Agent } from "@dherman/patchwork";
-
-const DEFAULT_AGENT_CMD = "npx -y @zed-industries/claude-code-acp";
 
 /**
  * Creates a SchemaProvider from a TypeBox schema.
