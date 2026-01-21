@@ -33,8 +33,8 @@ try {
   const greeting: Greeting = await agent
     .think(GreetingSchema)
     .text(`
-      Use the current_time tool to get the current time, and create a friendly
-      greeting message appropriate for that time of day.
+      Use the current_time tool to get the current time, and create a
+      friendly greeting message appropriate for that time of day.
     `)
 
     .tool(
