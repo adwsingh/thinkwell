@@ -1,9 +1,9 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { connect } from "./patchwork.js";
+import { Agent, schemaOf } from "./index.js";
 
 /**
- * Integration tests for the patchwork library.
+ * Integration tests for the thinkwell library.
  *
  * These tests require:
  * - sacp-conductor installed: `cargo install sacp-conductor`
@@ -14,17 +14,16 @@ import { connect } from "./patchwork.js";
 
 const SKIP_INTEGRATION = process.env.SKIP_INTEGRATION_TESTS === "1";
 
-describe("Patchwork integration tests", { skip: SKIP_INTEGRATION }, () => {
+describe("Thinkwell integration tests", { skip: SKIP_INTEGRATION }, () => {
   // These are lightweight tests that don't require a live conductor.
   // The manual tests below demonstrate full end-to-end functionality.
 
-  describe("ThinkBuilder API (unit)", () => {
-    it("should support all builder methods", () => {
-      // This test just verifies the API shape compiles and chains correctly
-      // We can't actually run think() without a conductor connection
-
+  describe("Agent API (unit)", () => {
+    it("should export the expected API", () => {
       // Verify the module exports are correct
-      assert.ok(typeof connect === "function", "connect should be exported");
+      assert.ok(typeof Agent === "function", "Agent should be exported");
+      assert.ok(typeof Agent.connect === "function", "Agent.connect should be a static method");
+      assert.ok(typeof schemaOf === "function", "schemaOf should be exported");
     });
   });
 });
@@ -34,24 +33,23 @@ describe("Patchwork integration tests", { skip: SKIP_INTEGRATION }, () => {
  *
  * Run with: npx tsx src/integration.test.ts --manual
  *
- * This demonstrates the full patchwork workflow:
- * 1. Connect to conductor
+ * This demonstrates the full thinkwell workflow:
+ * 1. Connect to agent via conductor
  * 2. Create a think() builder with prompt and tools
  * 3. Execute and get typed result
  *
  * Environment variables:
- * - CONDUCTOR_COMMAND: Override the conductor command (default: "sacp-conductor agent")
+ * - AGENT_COMMAND: The agent command (default: "npx -y @zed-industries/claude-code-acp")
  */
-async function manualPatchworkTest() {
-  console.log("Starting manual patchwork integration test...\n");
+async function manualThinkwellTest() {
+  console.log("Starting manual thinkwell integration test...\n");
 
-  // The conductor command depends on your setup
-  const conductorCommand = process.env.CONDUCTOR_COMMAND?.split(" ") ?? ["sacp-conductor", "agent"];
-  console.log("Using conductor command:", conductorCommand.join(" "));
+  const agentCommand = process.env.AGENT_COMMAND ?? "npx -y @zed-industries/claude-code-acp";
+  console.log("Using agent command:", agentCommand);
 
-  // Connect to the conductor
-  const patchwork = await connect(conductorCommand);
-  console.log("Connected to conductor\n");
+  // Connect to the agent
+  const agent = await Agent.connect(agentCommand);
+  console.log("Connected to agent\n");
 
   try {
     // Define the expected output type
@@ -61,67 +59,67 @@ async function manualPatchworkTest() {
       steps: string[];
     }
 
+    const MathResultSchema = schemaOf<MathResult>({
+      type: "object",
+      properties: {
+        expression: { type: "string", description: "The original expression" },
+        result: { type: "number", description: "The final result" },
+        steps: {
+          type: "array",
+          items: { type: "string" },
+          description: "The calculation steps taken",
+        },
+      },
+      required: ["expression", "result", "steps"],
+    });
+
     // Track tool calls for verification
     const toolCalls: string[] = [];
 
     // Build and execute a think prompt
     console.log("Executing think() with math problem...\n");
 
-    const result = await patchwork.think<MathResult>()
+    const result = await agent.think(MathResultSchema)
       .textln("# Math Problem")
       .textln("")
       .text("Calculate the following expression step by step: ")
-      .display("(5 + 3) * 2")
-      .textln("")
+      .quote("(5 + 3) * 2")
       .textln("")
       .textln("Use the available tools to perform each operation.")
       .tool(
         "add",
         "Add two numbers together",
-        async (input: { a: number; b: number }) => {
-          toolCalls.push(`add(${input.a}, ${input.b})`);
-          console.log(`  Tool call: add(${input.a}, ${input.b}) = ${input.a + input.b}`);
-          return { result: input.a + input.b };
-        },
-        {
+        schemaOf<{ a: number; b: number }>({
           type: "object",
           properties: {
             a: { type: "number", description: "First number" },
             b: { type: "number", description: "Second number" },
           },
           required: ["a", "b"],
+        }),
+        async (input: { a: number; b: number }) => {
+          toolCalls.push(`add(${input.a}, ${input.b})`);
+          console.log(`  Tool call: add(${input.a}, ${input.b}) = ${input.a + input.b}`);
+          return { result: input.a + input.b };
         }
       )
       .tool(
         "multiply",
         "Multiply two numbers",
-        async (input: { a: number; b: number }) => {
-          toolCalls.push(`multiply(${input.a}, ${input.b})`);
-          console.log(`  Tool call: multiply(${input.a}, ${input.b}) = ${input.a * input.b}`);
-          return { result: input.a * input.b };
-        },
-        {
+        schemaOf<{ a: number; b: number }>({
           type: "object",
           properties: {
             a: { type: "number", description: "First number" },
             b: { type: "number", description: "Second number" },
           },
           required: ["a", "b"],
+        }),
+        async (input: { a: number; b: number }) => {
+          toolCalls.push(`multiply(${input.a}, ${input.b})`);
+          console.log(`  Tool call: multiply(${input.a}, ${input.b}) = ${input.a * input.b}`);
+          return { result: input.a * input.b };
         }
       )
-      .outputSchema({
-        type: "object",
-        properties: {
-          expression: { type: "string", description: "The original expression" },
-          result: { type: "number", description: "The final result" },
-          steps: {
-            type: "array",
-            items: { type: "string" },
-            description: "The calculation steps taken",
-          },
-        },
-        required: ["expression", "result", "steps"],
-      })
       .run();
 
     console.log("\n--- Result ---");
@@ -140,7 +138,7 @@ async function manualPatchworkTest() {
   } catch (error) {
     console.error("Error:", error);
   } finally {
-    patchwork.close();
+    agent.close();
     console.log("\nConnection closed");
   }
 }
@@ -149,36 +147,35 @@ async function manualPatchworkTest() {
  * Simpler manual test without tools.
  */
 async function simpleManualTest() {
-  console.log("Starting simple patchwork test...\n");
+  console.log("Starting simple thinkwell test...\n");
 
-  const conductorCommand = process.env.CONDUCTOR_COMMAND?.split(" ") ?? ["sacp-conductor", "agent"];
-  const patchwork = await connect(conductorCommand);
+  const agentCommand = process.env.AGENT_COMMAND ?? "npx -y @zed-industries/claude-code-acp";
+  const agent = await Agent.connect(agentCommand);
 
   try {
     interface SimpleResult {
       greeting: string;
     }
 
-    const result = await patchwork.think<SimpleResult>()
+    const result = await agent.think(schemaOf<SimpleResult>({
+      type: "object",
+      properties: {
+        greeting: { type: "string" },
+      },
+      required: ["greeting"],
+    }))
       .text("Say hello to the user. Return a greeting message.")
-      .outputSchema({
-        type: "object",
-        properties: {
-          greeting: { type: "string" },
-        },
-        required: ["greeting"],
-      })
       .run();
 
     console.log("Result:", result);
   } finally {
-    patchwork.close();
+    agent.close();
   }
 }
 
 // Run manual tests based on command line args
 if (process.argv.includes("--manual")) {
-  manualPatchworkTest().catch(console.error);
+  manualThinkwellTest().catch(console.error);
 } else if (process.argv.includes("--simple")) {
   simpleManualTest().catch(console.error);
 }
