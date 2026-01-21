@@ -31,7 +31,7 @@ import { Agent } from "thinkwell";
  * Creates a SchemaProvider from a Zod schema.
  *
  * This adapter bridges Zod schemas to the SchemaProvider interface,
- * enabling seamless integration with patchwork.
+ * enabling seamless integration with thinkwell.
  *
  * @param schema - A Zod schema describing the expected type
  * @returns A SchemaProvider that produces the equivalent JSON Schema
@@ -43,7 +43,7 @@ import { Agent } from "thinkwell";
  *   age: z.number().int().positive(),
  * });
  *
- * const result = await patchwork
+ * const result = await agent
  *   .think(zodSchema(UserSchema))
  *   .text("Extract user info from this text")
  *   .run();
@@ -145,7 +145,7 @@ const TextPassage = z.object({
 // =============================================================================
 
 export default async function main() {
-  const agent = await Agent.connect(process.env.PATCHWORK_AGENT_CMD ?? CLAUDE_CODE);
+  const agent = await Agent.connect(process.env.THINKWELL_AGENT_CMD ?? CLAUDE_CODE);
 
   try {
     // -------------------------------------------------------------------------

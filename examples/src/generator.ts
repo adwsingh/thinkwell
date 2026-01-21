@@ -133,7 +133,7 @@ export interface TextPassage {
 const sentimentAnalyzer = new Sentiment();
 
 export default async function main() {
-  const agent = await Agent.connect(process.env.PATCHWORK_AGENT_CMD ?? CLAUDE_CODE);
+  const agent = await Agent.connect(process.env.THINKWELL_AGENT_CMD ?? CLAUDE_CODE);
 
   try {
     // -------------------------------------------------------------------------

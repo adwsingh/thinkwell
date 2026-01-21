@@ -16,7 +16,7 @@
  *   npx tsx src/demo.ts
  *
  *   # With a custom agent command:
- *   PATCHWORK_AGENT_CMD='npx -y @zed-industries/claude-code-acp' npx tsx src/demo.ts
+ *   THINKWELL_AGENT_CMD='npx -y @zed-industries/claude-code-acp' npx tsx src/demo.ts
  */
 
 
@@ -63,7 +63,7 @@ async function main() {
     console.log("  all       - Run all patterns (default)");
     console.log("");
     console.log("Environment variables:");
-    console.log(`  PATCHWORK_AGENT_CMD - Custom agent command`);
+    console.log(`  THINKWELL_AGENT_CMD - Custom agent command`);
     console.log(`                  (default: ${CLAUDE_CODE})`);
     process.exit(1);
   }

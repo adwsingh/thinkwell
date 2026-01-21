@@ -1,7 +1,7 @@
 /**
  * Example: JavaScript Unminifier using LLM
  *
- * This example demonstrates using patchwork to unminify JavaScript code
+ * This example demonstrates using thinkwell to unminify JavaScript code
  * through a series of LLM-powered transformations:
  * 1. Pretty-print with Prettier
  * 2. Convert UMD wrapper to ESM default export
@@ -117,7 +117,7 @@ export async function formatCode(code: string): Promise<string> {
 // =============================================================================
 
 export default async function main() {
-  const agent = await Agent.connect(process.env.PATCHWORK_AGENT_CMD ?? CLAUDE_CODE);
+  const agent = await Agent.connect(process.env.THINKWELL_AGENT_CMD ?? CLAUDE_CODE);
 
   try {
     // Read the minified input file

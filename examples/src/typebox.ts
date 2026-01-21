@@ -40,7 +40,7 @@ import { Agent } from "thinkwell";
  *   age: Type.Integer({ minimum: 0 }),
  * });
  *
- * const result = await patchwork
+ * const result = await agent
  *   .think(typeboxSchema(UserSchema))
  *   .text("Extract user info from this text")
  *   .run();
@@ -149,7 +149,7 @@ const TextPassageTypeBox = Type.Object({
 // =============================================================================
 
 export default async function main() {
-  const agent = await Agent.connect(process.env.PATCHWORK_AGENT_CMD ?? CLAUDE_CODE);
+  const agent = await Agent.connect(process.env.THINKWELL_AGENT_CMD ?? CLAUDE_CODE);
 
   try {
     // -------------------------------------------------------------------------
