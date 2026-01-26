@@ -3,10 +3,79 @@
  *
  * The conductor orchestrates message routing between clients, proxies, and agents.
  * It sits between every component, managing process lifecycle and message flow.
+ *
+ * ## Quick Start
+ *
+ * ```typescript
+ * import { Conductor, fromCommands, createChannelPair } from '@thinkwell/conductor';
+ *
+ * // Create a conductor that spawns an agent subprocess
+ * const conductor = new Conductor({
+ *   instantiator: fromCommands(['my-agent']),
+ * });
+ *
+ * // Connect via a channel (for testing) or stdio (for production)
+ * const [clientEnd, conductorEnd] = createChannelPair();
+ * await conductor.connect(conductorEnd);
+ * ```
+ *
+ * ## Logging
+ *
+ * Enable logging to see what the conductor is doing:
+ *
+ * ```typescript
+ * const conductor = new Conductor({
+ *   instantiator: fromCommands(['my-agent']),
+ *   logging: {
+ *     level: 'debug', // 'error' | 'warn' | 'info' | 'debug' | 'trace'
+ *     name: 'my-app',
+ *   },
+ * });
+ * ```
+ *
+ * ## JSONL Tracing
+ *
+ * Write all messages to a JSONL file for debugging:
+ *
+ * ```typescript
+ * const conductor = new Conductor({
+ *   instantiator: fromCommands(['my-agent']),
+ *   trace: {
+ *     path: '/tmp/conductor-trace.jsonl',
+ *   },
+ * });
+ * ```
+ *
+ * ## Architecture
+ *
+ * The conductor uses a central message queue to preserve ordering:
+ *
+ * ```
+ * Client ←→ Conductor ←→ [Proxy 0] ←→ [Proxy 1] ←→ ... ←→ Agent
+ * ```
+ *
+ * All messages flow through the conductor's event loop, ensuring that
+ * responses never overtake notifications.
+ *
+ * @module
  */
 
 // Conductor
 export { Conductor, type ConductorConfig } from "./conductor.js";
+
+// Logging
+export {
+  createLogger,
+  createNoopLogger,
+  getLogger,
+  setLogger,
+  type Logger,
+  type LoggerOptions,
+  type LogLevel,
+  type LogEntry,
+  type TraceOptions,
+  type TraceEntry,
+} from "./logger.js";
 
 // Instantiators
 export {

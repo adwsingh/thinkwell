@@ -50,6 +50,7 @@ import type {
 } from "./types.js";
 import { MessageQueue } from "./message-queue.js";
 import { McpBridge, type McpServerSpec } from "./mcp-bridge/index.js";
+import { createLogger, createNoopLogger, type Logger, type LoggerOptions, type TraceOptions } from "./logger.js";
 
 /**
  * Configuration for the Conductor
@@ -61,6 +62,10 @@ export interface ConductorConfig {
   instantiator: ComponentInstantiator;
   /** MCP bridge mode (disabled by default for Phase 2) */
   mcpBridgeMode?: "http" | "disabled";
+  /** Logging configuration */
+  logging?: LoggerOptions;
+  /** JSONL trace output configuration */
+  trace?: TraceOptions;
 }
 
 /**
@@ -110,6 +115,7 @@ interface PendingRequest {
 export class Conductor {
   private readonly config: ConductorConfig;
   private readonly messageQueue = new MessageQueue();
+  private readonly logger: Logger;
   private state: ConductorState = { type: "uninitialized" };
 
   // Component connections (populated after initialization)
@@ -139,6 +145,24 @@ export class Conductor {
 
   constructor(config: ConductorConfig) {
     this.config = config;
+
+    // Initialize logger
+    if (config.logging) {
+      this.logger = createLogger({
+        ...config.logging,
+        name: config.logging.name ?? config.name ?? "conductor",
+        trace: config.trace ?? config.logging.trace,
+      });
+    } else if (config.trace) {
+      this.logger = createLogger({
+        level: "info",
+        name: config.name ?? "conductor",
+        trace: config.trace,
+      });
+    } else {
+      this.logger = createNoopLogger();
+    }
+
     // Initialize MCP bridge if enabled
     if (config.mcpBridgeMode !== "disabled") {
       this.mcpBridge = new McpBridge({ messageQueue: this.messageQueue });
@@ -155,13 +179,17 @@ export class Conductor {
       throw new Error(`Conductor is already ${this.state.type}`);
     }
 
+    this.logger.info("Connecting to client");
     this.clientConnection = await clientConnector.connect();
+    this.logger.debug("Client connected, starting message pump");
 
     // Pump client messages into the queue
     this.pumpClientMessages(this.clientConnection);
 
     // Run the main event loop
+    this.logger.debug("Starting event loop");
     await this.runEventLoop();
+    this.logger.info("Event loop exited");
   }
 
   /**
@@ -172,6 +200,7 @@ export class Conductor {
       return;
     }
 
+    this.logger.info("Shutting down conductor");
     this.state = { type: "shutdown" };
     this.messageQueue.close();
 
@@ -196,6 +225,7 @@ export class Conductor {
     }
 
     await Promise.all(closePromises);
+    await this.logger.close();
   }
 
   /**
@@ -225,9 +255,10 @@ export class Conductor {
           }
         }
       } catch (error) {
-        console.error("Error reading from client:", error);
+        this.logger.error("Error reading from client", { error: String(error) });
       } finally {
         // Client disconnected - shut down
+        this.logger.debug("Client disconnected, shutting down");
         this.shutdown();
       }
     })();
@@ -273,9 +304,10 @@ export class Conductor {
           }
         }
       } catch (error) {
-        console.error(`Error reading from proxy[${proxyIndex}]:`, error);
+        this.logger.error("Error reading from proxy", { proxyIndex, error: String(error) });
       } finally {
         // Component disconnected - shut down the whole chain
+        this.logger.debug("Proxy disconnected, shutting down", { proxyIndex });
         this.shutdown();
       }
     })();
@@ -300,9 +332,10 @@ export class Conductor {
           }
         }
       } catch (error) {
-        console.error("Error reading from agent:", error);
+        this.logger.error("Error reading from agent", { error: String(error) });
       } finally {
         // Component disconnected - shut down the whole chain
+        this.logger.debug("Agent disconnected, shutting down");
         this.shutdown();
       }
     })();
@@ -470,35 +503,103 @@ export class Conductor {
    * Handle a message from the queue
    */
   private async handleMessage(message: ConductorMessage): Promise<void> {
+    // Trace message for JSONL output
+    this.logger.traceMessage({
+      direction: message.type === "left-to-right" ? "left-to-right"
+        : message.type === "right-to-left" ? "right-to-left"
+        : "internal",
+      source: this.getMessageSource(message),
+      target: this.getMessageTarget(message),
+      message,
+    });
+
     switch (message.type) {
       case "left-to-right":
+        this.logger.trace("Routing left-to-right", {
+          targetIndex: message.targetIndex,
+          dispatchType: message.dispatch.type,
+          method: "method" in message.dispatch ? message.dispatch.method : undefined,
+        });
         await this.handleLeftToRight(message.targetIndex, message.dispatch);
         break;
 
       case "right-to-left":
+        this.logger.trace("Routing right-to-left", {
+          sourceIndex: message.sourceIndex,
+          dispatchType: message.dispatch.type,
+          method: "method" in message.dispatch ? message.dispatch.method : undefined,
+        });
         await this.handleRightToLeft(message.sourceIndex, message.dispatch);
         break;
 
       case "shutdown":
+        this.logger.debug("Received shutdown message");
         // Already handled by message queue closing
         break;
 
       // MCP bridge messages
       case "mcp-connection-received":
+        this.logger.debug("MCP connection received", { acpUrl: message.acpUrl, connectionId: message.connectionId });
         await this.handleMcpConnectionReceived(message.acpUrl, message.connectionId);
         break;
 
       case "mcp-connection-established":
+        this.logger.debug("MCP connection established", { connectionId: message.connectionId });
         // Connection established successfully - nothing more to do
         break;
 
       case "mcp-client-to-server":
+        this.logger.trace("MCP client-to-server message", { connectionId: message.connectionId });
         await this.handleMcpClientToServer(message.connectionId, message.dispatch);
         break;
 
       case "mcp-connection-disconnected":
+        this.logger.debug("MCP connection disconnected", { connectionId: message.connectionId });
         await this.handleMcpConnectionDisconnected(message.connectionId);
         break;
+    }
+  }
+
+  /**
+   * Get the source identifier for a message (for tracing)
+   */
+  private getMessageSource(message: ConductorMessage): string {
+    switch (message.type) {
+      case "left-to-right":
+        return message.targetIndex === 0 ? "client" : `proxy[${message.targetIndex - 1}]`;
+      case "right-to-left":
+        return message.sourceIndex.type === "successor" ? "agent" : `proxy[${message.sourceIndex.index}]`;
+      case "mcp-connection-received":
+      case "mcp-client-to-server":
+      case "mcp-connection-disconnected":
+        return "mcp-bridge";
+      default:
+        return "internal";
+    }
+  }
+
+  /**
+   * Get the target identifier for a message (for tracing)
+   */
+  private getMessageTarget(message: ConductorMessage): string {
+    switch (message.type) {
+      case "left-to-right":
+        return message.targetIndex < this.proxies.length
+          ? `proxy[${message.targetIndex}]`
+          : "agent";
+      case "right-to-left":
+        if (message.sourceIndex.type === "proxy" && message.sourceIndex.index === 0) {
+          return "client";
+        }
+        return message.sourceIndex.type === "successor"
+          ? `proxy[${this.proxies.length - 1}]`
+          : `proxy[${message.sourceIndex.index - 1}]`;
+      case "mcp-connection-received":
+      case "mcp-client-to-server":
+      case "mcp-connection-disconnected":
+        return "client";
+      default:
+        return "conductor";
     }
   }
 
@@ -656,6 +757,7 @@ export class Conductor {
     }
 
     this.state = { type: "initializing" };
+    this.logger.info("Starting initialization");
 
     try {
       // Build the initialize request structure
@@ -665,21 +767,27 @@ export class Conductor {
       };
 
       // Instantiate components
+      this.logger.debug("Instantiating components");
       const { proxies, agent } = await this.config.instantiator.instantiate(initRequest);
+      this.logger.info("Components instantiated", { proxyCount: proxies.length });
 
       // Connect to proxies
       for (const proxyConnector of proxies) {
         const proxyConnection = await proxyConnector.connect();
         this.proxies.push(proxyConnection);
+        this.logger.debug("Proxy connected", { proxyIndex: this.proxies.length - 1 });
         // Start pumping messages from this proxy
         this.pumpProxyMessages(proxyConnection, this.proxies.length - 1);
       }
 
       // Connect to agent
+      this.logger.debug("Connecting to agent");
       this.agentConnection = await agent.connect();
       this.pumpAgentMessages(this.agentConnection);
+      this.logger.info("Agent connected");
 
       this.state = { type: "running" };
+      this.logger.info("Conductor running");
 
       if (this.proxies.length === 0) {
         // No proxies - forward initialize directly to agent
@@ -712,6 +820,7 @@ export class Conductor {
       }
     } catch (error) {
       this.state = { type: "uninitialized" };
+      this.logger.error("Initialization failed", { error: String(error) });
       dispatch.responder.respondWithError({
         code: -32603,
         message: `Failed to initialize: ${error}`,
@@ -796,7 +905,7 @@ export class Conductor {
     const pending = this.pendingRequests.get(String(dispatch.id));
     if (!pending) {
       // No pending request for this ID - might be a duplicate or error
-      console.error(`No pending request for response ID: ${dispatch.id}`);
+      this.logger.warn("No pending request for response ID", { id: dispatch.id });
       return;
     }
 
@@ -978,7 +1087,7 @@ export class Conductor {
         });
       },
       (error) => {
-        console.error("MCP connect failed:", error);
+        this.logger.error("MCP connect failed", { connectionId, acpUrl, error });
       }
     );
 

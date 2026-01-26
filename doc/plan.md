@@ -55,7 +55,7 @@ This plan tracks the implementation of the TypeScript conductor. See [doc/rfd/co
 
 ## Phase 7: Polish
 
-- [ ] Error handling refinement
-- [ ] Logging/debugging support
-- [ ] Optional JSONL tracing output
-- [ ] Documentation
+- [x] Error handling refinement
+- [x] Logging/debugging support
+- [x] Optional JSONL tracing output
+- [x] Documentation
