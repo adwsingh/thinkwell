@@ -7,14 +7,19 @@
  * 1. Manages the message event loop
  * 2. Routes messages left-to-right (client → proxies → agent)
  * 3. Routes messages right-to-left (agent → proxies → client)
- * 4. Correlates requests with responses via a pending request map
+ * 4. Handles `_proxy/successor/*` message wrapping/unwrapping
+ * 5. Manages proxy capability handshake during initialization
+ * 6. Correlates requests with responses via a pending request map
  */
 
 import type {
   JsonRpcMessage,
   JsonRpcId,
+  JsonRpcError,
   Dispatch,
   Responder,
+  ProxySuccessorRequestParams,
+  ProxySuccessorNotificationParams,
 } from "@thinkwell/protocol";
 import {
   isJsonRpcRequest,
@@ -25,6 +30,12 @@ import {
   createRequest,
   createNotification,
   createResponder,
+  PROXY_SUCCESSOR_REQUEST,
+  PROXY_SUCCESSOR_NOTIFICATION,
+  unwrapProxySuccessorRequest,
+  unwrapProxySuccessorNotification,
+  wrapAsProxySuccessorRequest,
+  wrapAsProxySuccessorNotification,
 } from "@thinkwell/protocol";
 
 import type {
@@ -34,6 +45,7 @@ import type {
   ConductorMessage,
   SourceIndex,
   InitializeRequest,
+  InitializeResponse,
 } from "./types.js";
 import { MessageQueue } from "./message-queue.js";
 
@@ -60,10 +72,16 @@ type ConductorState =
 
 /**
  * Pending request entry - tracks requests waiting for responses
+ *
+ * We track the source so we know how to route the response back:
+ * - "client" → send response directly to client
+ * - proxyIndex → wrap response and send as `_proxy/successor/request` response to that proxy
  */
 interface PendingRequest {
   originalId: JsonRpcId;
   responder: Responder;
+  /** Source of the request - "client" or proxy index */
+  source: "client" | number;
 }
 
 /**
@@ -71,6 +89,21 @@ interface PendingRequest {
  *
  * It sits between a client and an agent, routing all messages through
  * a central event loop to preserve message ordering.
+ *
+ * ## Message Flow with Proxies
+ *
+ * ### Left-to-Right (client → agent):
+ * 1. Client sends request to conductor
+ * 2. Conductor forwards to proxy[0] (normal ACP)
+ * 3. Proxy[0] sends `_proxy/successor/request` to conductor
+ * 4. Conductor unwraps and forwards to proxy[1] (normal ACP)
+ * 5. ... until agent receives normal ACP
+ *
+ * ### Right-to-Left (agent → client):
+ * 1. Agent sends notification/request to conductor
+ * 2. Conductor wraps in `_proxy/successor/request` and sends to proxy[n-1]
+ * 3. Proxy[n-1] processes and forwards to conductor
+ * 4. ... until client receives normal ACP
  */
 export class Conductor {
   private readonly config: ConductorConfig;
@@ -146,7 +179,7 @@ export class Conductor {
     (async () => {
       try {
         for await (const message of client.messages) {
-          const dispatch = this.messageToDispatch(message, "client");
+          const dispatch = this.messageToDispatch(message, { type: "client" });
           if (dispatch) {
             this.messageQueue.push({
               type: "left-to-right",
@@ -165,26 +198,46 @@ export class Conductor {
   }
 
   /**
-   * Pump messages from a component (proxy or agent) into the message queue
+   * Pump messages from a proxy into the message queue
    */
-  private pumpComponentMessages(
+  private pumpProxyMessages(
     connection: ComponentConnection,
-    sourceIndex: SourceIndex
+    proxyIndex: number
   ): void {
     (async () => {
       try {
         for await (const message of connection.messages) {
-          const dispatch = this.messageToDispatch(message, "component");
+          // Check for `_proxy/successor/*` messages
+          if (isJsonRpcRequest(message)) {
+            if (message.method === PROXY_SUCCESSOR_REQUEST) {
+              // Proxy is forwarding a request to its successor
+              this.handleProxySuccessorRequest(proxyIndex, message);
+              continue;
+            }
+          }
+          if (isJsonRpcNotification(message)) {
+            if (message.method === PROXY_SUCCESSOR_NOTIFICATION) {
+              // Proxy is forwarding a notification to its successor
+              this.handleProxySuccessorNotification(proxyIndex, message);
+              continue;
+            }
+          }
+
+          // Non-successor messages go right-to-left (toward client)
+          const dispatch = this.messageToDispatch(message, {
+            type: "proxy",
+            index: proxyIndex,
+          });
           if (dispatch) {
             this.messageQueue.push({
               type: "right-to-left",
-              sourceIndex,
+              sourceIndex: { type: "proxy", index: proxyIndex },
               dispatch,
             });
           }
         }
       } catch (error) {
-        console.error("Error reading from component:", error);
+        console.error(`Error reading from proxy[${proxyIndex}]:`, error);
       } finally {
         // Component disconnected - shut down the whole chain
         this.shutdown();
@@ -193,11 +246,107 @@ export class Conductor {
   }
 
   /**
+   * Pump messages from the agent into the message queue
+   */
+  private pumpAgentMessages(connection: ComponentConnection): void {
+    (async () => {
+      try {
+        for await (const message of connection.messages) {
+          const dispatch = this.messageToDispatch(message, {
+            type: "successor",
+          });
+          if (dispatch) {
+            this.messageQueue.push({
+              type: "right-to-left",
+              sourceIndex: { type: "successor" },
+              dispatch,
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Error reading from agent:", error);
+      } finally {
+        // Component disconnected - shut down the whole chain
+        this.shutdown();
+      }
+    })();
+  }
+
+  /**
+   * Handle a `_proxy/successor/request` from a proxy
+   *
+   * The proxy is forwarding a request to its successor (next proxy or agent).
+   * We unwrap the inner request and forward it.
+   */
+  private handleProxySuccessorRequest(
+    proxyIndex: number,
+    message: JsonRpcMessage & { id: JsonRpcId; method: string; params?: unknown }
+  ): void {
+    const params = message.params as ProxySuccessorRequestParams;
+    const inner = unwrapProxySuccessorRequest(params);
+
+    // Create a responder that wraps the response back to the proxy
+    const responder = createResponder(
+      (result) => {
+        // Send success response back to the proxy for the _proxy/successor/request
+        this.proxies[proxyIndex]?.send(createSuccessResponse(message.id, result));
+      },
+      (error) => {
+        // Send error response back to the proxy
+        this.proxies[proxyIndex]?.send(createErrorResponse(message.id, error));
+      }
+    );
+
+    const dispatch: Dispatch = {
+      type: "request",
+      id: message.id,
+      method: inner.method,
+      params: inner.params,
+      responder,
+    };
+
+    // Forward to the next component (proxy[proxyIndex+1] or agent)
+    const targetIndex = proxyIndex + 1;
+    this.messageQueue.push({
+      type: "left-to-right",
+      targetIndex,
+      dispatch,
+    });
+  }
+
+  /**
+   * Handle a `_proxy/successor/notification` from a proxy
+   *
+   * The proxy is forwarding a notification to its successor.
+   */
+  private handleProxySuccessorNotification(
+    proxyIndex: number,
+    message: JsonRpcMessage & { method: string; params?: unknown }
+  ): void {
+    const params = message.params as ProxySuccessorNotificationParams;
+    const inner = unwrapProxySuccessorNotification(params);
+
+    const dispatch: Dispatch = {
+      type: "notification",
+      method: inner.method,
+      params: inner.params,
+    };
+
+    // Forward to the next component
+    const targetIndex = proxyIndex + 1;
+    this.messageQueue.push({
+      type: "left-to-right",
+      targetIndex,
+      dispatch,
+    });
+  }
+
+  /**
    * Convert a JSON-RPC message to a Dispatch
    */
   private messageToDispatch(
     message: JsonRpcMessage,
-    source: "client" | "component"
+    source: { type: "client" } | { type: "proxy"; index: number } | { type: "successor" }
   ): Dispatch | null {
     if (isJsonRpcRequest(message)) {
       // For requests, we need to create a responder that routes back
@@ -235,10 +384,10 @@ export class Conductor {
    * Create a responder that routes the response back to the appropriate destination
    */
   private createResponderForSource(
-    source: "client" | "component",
+    source: { type: "client" } | { type: "proxy"; index: number } | { type: "successor" },
     requestId: JsonRpcId
   ): Responder {
-    if (source === "client") {
+    if (source.type === "client") {
       // Response goes back to client
       return createResponder(
         (result) => {
@@ -248,9 +397,19 @@ export class Conductor {
           this.clientConnection?.send(createErrorResponse(requestId, error));
         }
       );
+    } else if (source.type === "proxy") {
+      // Response goes back to the proxy (as response to a normal ACP request)
+      const proxyIndex = source.index;
+      return createResponder(
+        (result) => {
+          this.proxies[proxyIndex]?.send(createSuccessResponse(requestId, result));
+        },
+        (error) => {
+          this.proxies[proxyIndex]?.send(createErrorResponse(requestId, error));
+        }
+      );
     } else {
-      // Response goes back to the component that sent the request
-      // For now in pass-through mode, this goes to the agent
+      // Response goes back to the agent
       return createResponder(
         (result) => {
           this.agentConnection?.send(createSuccessResponse(requestId, result));
@@ -305,8 +464,9 @@ export class Conductor {
     targetIndex: number,
     dispatch: Dispatch
   ): Promise<void> {
-    // Check if this is an initialize request and we need to set up components
+    // Check if this is an initialize request from the client and we need to set up components
     if (
+      targetIndex === 0 &&
       dispatch.type === "request" &&
       (dispatch.method === "initialize" || dispatch.method === "acp/initialize")
     ) {
@@ -314,21 +474,24 @@ export class Conductor {
       return;
     }
 
-    // For pass-through mode (no proxies), forward directly to agent
-    if (this.proxies.length === 0 && this.agentConnection) {
-      this.forwardToConnection(this.agentConnection, dispatch);
+    // Determine target connection
+    const target = this.getTargetConnection(targetIndex);
+    if (!target) {
+      if (dispatch.type === "request") {
+        dispatch.responder.respondWithError({
+          code: -32603,
+          message: `No target connection for index ${targetIndex}`,
+        });
+      }
       return;
     }
 
-    // With proxies, forward to the target proxy or agent
-    const target = this.getTargetConnection(targetIndex);
-    if (target) {
-      this.forwardToConnection(target, dispatch);
-    }
+    // Forward to the target
+    this.forwardToConnection(target, dispatch);
   }
 
   /**
-   * Handle a right-to-left message (agent → client direction)
+   * Handle a right-to-left message (agent/proxy → client direction)
    */
   private async handleRightToLeft(
     sourceIndex: SourceIndex,
@@ -340,15 +503,92 @@ export class Conductor {
       return;
     }
 
-    // Notifications and requests from the agent go to the client
-    // (In Phase 3, proxies will intercept and potentially modify)
-    if (this.clientConnection) {
-      this.forwardToConnection(this.clientConnection, dispatch);
+    // Determine where to send this message
+    // - If from successor (agent) and we have proxies, wrap and send to last proxy
+    // - If from proxy[n], send to proxy[n-1] or client if n==0
+    // - If no proxies, send directly to client
+
+    if (this.proxies.length === 0) {
+      // No proxies - send directly to client
+      if (this.clientConnection) {
+        this.forwardToConnection(this.clientConnection, dispatch);
+      }
+      return;
+    }
+
+    if (sourceIndex.type === "successor") {
+      // Message from agent - wrap and send to last proxy
+      const lastProxyIndex = this.proxies.length - 1;
+      this.forwardWrappedToProxy(lastProxyIndex, dispatch);
+    } else if (sourceIndex.type === "proxy") {
+      const proxyIndex = sourceIndex.index;
+      if (proxyIndex === 0) {
+        // First proxy - send to client (unwrapped)
+        if (this.clientConnection) {
+          this.forwardToConnection(this.clientConnection, dispatch);
+        }
+      } else {
+        // Send to previous proxy (wrapped)
+        this.forwardWrappedToProxy(proxyIndex - 1, dispatch);
+      }
     }
   }
 
   /**
-   * Handle the initialize request - instantiate components and forward
+   * Forward a dispatch to a proxy, wrapped in `_proxy/successor/*`
+   *
+   * This is used when routing messages FROM a successor (agent or later proxy)
+   * TO an earlier proxy in the chain.
+   */
+  private forwardWrappedToProxy(proxyIndex: number, dispatch: Dispatch): void {
+    const proxy = this.proxies[proxyIndex];
+    if (!proxy) return;
+
+    switch (dispatch.type) {
+      case "request": {
+        // Wrap as `_proxy/successor/request`
+        const wrappedParams = wrapAsProxySuccessorRequest(
+          dispatch.method,
+          dispatch.params
+        );
+        const outgoingId = this.generateRequestId();
+        this.pendingRequests.set(String(outgoingId), {
+          originalId: dispatch.id,
+          responder: dispatch.responder,
+          source: proxyIndex,
+        });
+        proxy.send(
+          createRequest(outgoingId, PROXY_SUCCESSOR_REQUEST, wrappedParams)
+        );
+        break;
+      }
+
+      case "notification": {
+        // Wrap as `_proxy/successor/notification`
+        const wrappedParams = wrapAsProxySuccessorNotification(
+          dispatch.method,
+          dispatch.params
+        );
+        proxy.send(createNotification(PROXY_SUCCESSOR_NOTIFICATION, wrappedParams));
+        break;
+      }
+
+      case "response":
+        // Responses are handled via handleResponse, not here
+        break;
+    }
+  }
+
+  /**
+   * Handle the initialize request - instantiate components and perform initialization sequence
+   *
+   * The initialization follows this sequence:
+   * 1. Instantiate all components (connect to proxies and agent)
+   * 2. Send `initialize` with `_meta.proxy: true` to proxy[0]
+   * 3. Proxy[0] will use `_proxy/successor/request` to forward to proxy[1], etc.
+   * 4. Agent receives `initialize` without proxy capability
+   * 5. Responses flow back up the chain
+   * 6. Conductor verifies each proxy accepted the proxy capability
    */
   private async handleInitialize(dispatch: Dispatch & { type: "request" }): Promise<void> {
     if (this.state.type !== "uninitialized") {
@@ -376,29 +616,42 @@ export class Conductor {
         const proxyConnection = await proxyConnector.connect();
         this.proxies.push(proxyConnection);
         // Start pumping messages from this proxy
-        this.pumpComponentMessages(proxyConnection, {
-          type: "proxy",
-          index: this.proxies.length - 1,
-        });
+        this.pumpProxyMessages(proxyConnection, this.proxies.length - 1);
       }
 
       // Connect to agent
       this.agentConnection = await agent.connect();
-      this.pumpComponentMessages(this.agentConnection, { type: "successor" });
+      this.pumpAgentMessages(this.agentConnection);
 
       this.state = { type: "running" };
 
-      // Forward the initialize request to the agent
-      // Track it so we can route the response back
-      const outgoingId = this.generateRequestId();
-      this.pendingRequests.set(String(outgoingId), {
-        originalId: dispatch.id,
-        responder: dispatch.responder,
-      });
+      if (this.proxies.length === 0) {
+        // No proxies - forward initialize directly to agent
+        const outgoingId = this.generateRequestId();
+        this.pendingRequests.set(String(outgoingId), {
+          originalId: dispatch.id,
+          responder: dispatch.responder,
+          source: "client",
+        });
 
-      this.agentConnection.send(
-        createRequest(outgoingId, dispatch.method, dispatch.params)
-      );
+        this.agentConnection.send(
+          createRequest(outgoingId, dispatch.method, dispatch.params)
+        );
+      } else {
+        // With proxies - send initialize with proxy capability to first proxy
+        const paramsWithProxy = this.addProxyCapability(dispatch.params);
+
+        const outgoingId = this.generateRequestId();
+        this.pendingRequests.set(String(outgoingId), {
+          originalId: dispatch.id,
+          responder: this.createProxyInitializeResponder(dispatch.responder),
+          source: "client",
+        });
+
+        this.proxies[0].send(
+          createRequest(outgoingId, dispatch.method, paramsWithProxy)
+        );
+      }
     } catch (error) {
       this.state = { type: "uninitialized" };
       dispatch.responder.respondWithError({
@@ -406,6 +659,57 @@ export class Conductor {
         message: `Failed to initialize: ${error}`,
       });
     }
+  }
+
+  /**
+   * Add proxy capability to initialize params
+   */
+  private addProxyCapability(params: unknown): unknown {
+    const p = (params ?? {}) as Record<string, unknown>;
+    const meta = (p._meta ?? {}) as Record<string, unknown>;
+    return {
+      ...p,
+      _meta: {
+        ...meta,
+        proxy: true,
+      },
+    };
+  }
+
+  /**
+   * Remove proxy capability from initialize params (for forwarding to agent)
+   */
+  private removeProxyCapability(params: unknown): unknown {
+    const p = (params ?? {}) as Record<string, unknown>;
+    const meta = (p._meta ?? {}) as Record<string, unknown>;
+    const { proxy: _, ...restMeta } = meta;
+    return {
+      ...p,
+      _meta: restMeta,
+    };
+  }
+
+  /**
+   * Create a responder that verifies the proxy accepted the capability
+   */
+  private createProxyInitializeResponder(originalResponder: Responder): Responder {
+    return createResponder(
+      (result) => {
+        // Verify the proxy accepted the proxy capability
+        const response = result as InitializeResponse;
+        if (!response?._meta?.proxy) {
+          originalResponder.respondWithError({
+            code: -32600,
+            message: "Proxy component did not accept proxy capability",
+          });
+          return;
+        }
+        originalResponder.respond(result);
+      },
+      (error) => {
+        originalResponder.respondWithError(error);
+      }
+    );
   }
 
   /**
@@ -442,6 +746,7 @@ export class Conductor {
         this.pendingRequests.set(String(outgoingId), {
           originalId: dispatch.id,
           responder: dispatch.responder,
+          source: "client", // Default - actual source tracking is in PendingRequest
         });
         connection.send(createRequest(outgoingId, dispatch.method, dispatch.params));
         break;

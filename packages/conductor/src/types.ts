@@ -90,6 +90,25 @@ export interface InitializeRequest {
 }
 
 /**
+ * ACP initialize response structure
+ */
+export interface InitializeResponse {
+  serverInfo?: {
+    name?: string;
+    version?: string;
+  };
+  capabilities?: {
+    mcp_acp_transport?: boolean;
+    [key: string]: unknown;
+  };
+  _meta?: {
+    proxy?: boolean;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
+/**
  * Result of component instantiation
  */
 export interface InstantiatedComponents {

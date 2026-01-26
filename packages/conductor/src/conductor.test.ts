@@ -9,6 +9,10 @@ import { Conductor, fromConnectors } from "./conductor.js";
 import { createChannelPair, inProcess } from "./connectors/channel.js";
 import type { ComponentConnection, ComponentConnector } from "./types.js";
 import type { JsonRpcMessage } from "@thinkwell/protocol";
+import {
+  PROXY_SUCCESSOR_REQUEST,
+  PROXY_SUCCESSOR_NOTIFICATION,
+} from "@thinkwell/protocol";
 
 /**
  * Create a simple mock agent that responds to requests
@@ -328,6 +332,608 @@ describe("Conductor", () => {
       assert.ok(fastResponse, "Should have received fast response");
       assert.deepEqual((slowResponse as any).result, { order: "slow" });
       assert.deepEqual((fastResponse as any).result, { order: "fast" });
+
+      await conductor.shutdown();
+    });
+  });
+
+  describe("proxy support", () => {
+    /**
+     * Create a simple pass-through proxy that accepts proxy capability
+     * and forwards all messages to its successor using _proxy/successor/*
+     *
+     * This proxy handles:
+     * - Requests from client (left-to-right): forwards via _proxy/successor/request
+     * - Notifications from client: forwards via _proxy/successor/notification
+     * - _proxy/successor/request from conductor (right-to-left): unwraps and sends to client
+     * - _proxy/successor/notification from conductor: unwraps and sends to client
+     */
+    function createPassThroughProxy(): ComponentConnector {
+      return inProcess(async (connection) => {
+        // Track pending requests so we can match responses
+        const pendingRequests = new Map<string, { originalId: any }>();
+
+        for await (const message of connection.messages) {
+          if ("method" in message && "id" in message) {
+            if (message.method === PROXY_SUCCESSOR_REQUEST) {
+              // This is from the conductor - a message FROM the successor TO us
+              // We need to unwrap it and send to our predecessor (client)
+              const params = message.params as { method: string; params: unknown };
+
+              // For requests from successor, we track and forward
+              const proxyId = `from-successor-${message.id}`;
+              pendingRequests.set(proxyId, { originalId: message.id });
+
+              connection.send({
+                jsonrpc: "2.0",
+                id: proxyId,
+                method: params.method,
+                params: params.params,
+              });
+            } else if (message.method === "initialize") {
+              // Check for proxy capability offer
+              const params = message.params as any;
+              const hasProxyOffer = params?._meta?.proxy === true;
+
+              if (hasProxyOffer) {
+                // Track this request
+                const proxyId = `proxy-${message.id}`;
+                pendingRequests.set(proxyId, { originalId: message.id });
+
+                // Forward to successor using _proxy/successor/request
+                connection.send({
+                  jsonrpc: "2.0",
+                  id: proxyId,
+                  method: PROXY_SUCCESSOR_REQUEST,
+                  params: {
+                    method: message.method,
+                    params: message.params,
+                  },
+                });
+              } else {
+                // No proxy offer - just respond with basic capabilities
+                connection.send({
+                  jsonrpc: "2.0",
+                  id: message.id,
+                  result: { serverInfo: { name: "proxy", version: "1.0" } },
+                });
+              }
+            } else {
+              // Forward all other requests to successor
+              const proxyId = `proxy-${message.id}`;
+              pendingRequests.set(proxyId, { originalId: message.id });
+
+              connection.send({
+                jsonrpc: "2.0",
+                id: proxyId,
+                method: PROXY_SUCCESSOR_REQUEST,
+                params: {
+                  method: message.method,
+                  params: message.params,
+                },
+              });
+            }
+          } else if ("method" in message && !("id" in message)) {
+            if (message.method === PROXY_SUCCESSOR_NOTIFICATION) {
+              // Notification from successor - unwrap and forward to client
+              const params = message.params as { method: string; params: unknown };
+              connection.send({
+                jsonrpc: "2.0",
+                method: params.method,
+                params: params.params,
+              });
+            } else {
+              // Forward client notifications to successor
+              connection.send({
+                jsonrpc: "2.0",
+                method: PROXY_SUCCESSOR_NOTIFICATION,
+                params: {
+                  method: message.method,
+                  params: message.params,
+                },
+              });
+            }
+          } else if ("result" in message || "error" in message) {
+            // Response - find the pending request and respond
+            const pending = pendingRequests.get(String((message as any).id));
+            if (pending) {
+              pendingRequests.delete(String((message as any).id));
+
+              if ("result" in message) {
+                const result = (message as any).result;
+                connection.send({
+                  jsonrpc: "2.0",
+                  id: pending.originalId,
+                  result: {
+                    ...result,
+                    _meta: { ...result?._meta, proxy: true },
+                  },
+                });
+              } else {
+                connection.send({
+                  jsonrpc: "2.0",
+                  id: pending.originalId,
+                  error: (message as any).error,
+                });
+              }
+            }
+          }
+        }
+      });
+    }
+
+    /**
+     * Create a transforming proxy that modifies requests
+     */
+    function createTransformingProxy(
+      transform: (method: string, params: unknown) => { method: string; params: unknown }
+    ): ComponentConnector {
+      return inProcess(async (connection) => {
+        const pendingRequests = new Map<
+          string,
+          { originalId: any; wasInitialize: boolean }
+        >();
+
+        for await (const message of connection.messages) {
+          if ("method" in message && "id" in message) {
+            if (message.method === "initialize") {
+              const params = message.params as any;
+              const hasProxyOffer = params?._meta?.proxy === true;
+
+              // Store the request info
+              const proxyId = `proxy-${message.id}`;
+              pendingRequests.set(proxyId, {
+                originalId: message.id,
+                wasInitialize: true,
+              });
+
+              // Forward (possibly transformed) request to successor
+              connection.send({
+                jsonrpc: "2.0",
+                id: proxyId,
+                method: PROXY_SUCCESSOR_REQUEST,
+                params: {
+                  method: message.method,
+                  params: message.params,
+                },
+              });
+            } else {
+              const proxyId = `proxy-${message.id}`;
+              pendingRequests.set(proxyId, {
+                originalId: message.id,
+                wasInitialize: false,
+              });
+
+              // Transform and forward
+              const transformed = transform(message.method, message.params);
+              connection.send({
+                jsonrpc: "2.0",
+                id: proxyId,
+                method: PROXY_SUCCESSOR_REQUEST,
+                params: transformed,
+              });
+            }
+          } else if ("result" in message || "error" in message) {
+            const pending = pendingRequests.get(String((message as any).id));
+            if (pending) {
+              pendingRequests.delete(String((message as any).id));
+
+              if ("result" in message) {
+                const result = (message as any).result;
+                connection.send({
+                  jsonrpc: "2.0",
+                  id: pending.originalId,
+                  result: pending.wasInitialize
+                    ? { ...result, _meta: { ...result?._meta, proxy: true } }
+                    : result,
+                });
+              } else {
+                connection.send({
+                  jsonrpc: "2.0",
+                  id: pending.originalId,
+                  error: (message as any).error,
+                });
+              }
+            }
+          }
+        }
+      });
+    }
+
+    it("should route messages through a single proxy", async () => {
+      const agentReceivedMethods: string[] = [];
+
+      const agent = createMockAgent((message, send) => {
+        if ("method" in message) {
+          agentReceivedMethods.push(message.method);
+        }
+        if ("method" in message && "id" in message) {
+          if (message.method === "initialize") {
+            send({
+              jsonrpc: "2.0",
+              id: message.id,
+              result: {
+                serverInfo: { name: "test-agent", version: "1.0" },
+                capabilities: {},
+              },
+            });
+          } else {
+            send({
+              jsonrpc: "2.0",
+              id: message.id,
+              result: { received: message.method },
+            });
+          }
+        }
+      });
+
+      const proxy = createPassThroughProxy();
+
+      const conductor = new Conductor({
+        instantiator: fromConnectors(agent, [proxy]),
+      });
+
+      const { connector, clientSend, waitForMessage, receivedMessages } =
+        createTestClient();
+
+      conductor.connect(connector);
+
+      // Send initialize
+      clientSend({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { clientInfo: { name: "test", version: "1.0" } },
+      });
+
+      const initResponse = await waitForMessage();
+      assert.equal((initResponse as any).id, 1);
+      assert.ok((initResponse as any).result, "Should have result");
+
+      // Send a regular request
+      clientSend({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "test/method",
+        params: { data: "hello" },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const methodResponse = receivedMessages.find((m) => (m as any).id === 2);
+      assert.ok(methodResponse, "Should have received response for test/method");
+      // Note: proxy adds _meta.proxy to all responses (simplified test proxy behavior)
+      assert.equal(
+        (methodResponse as any).result.received,
+        "test/method",
+        "Response should contain the method name"
+      );
+
+      // Verify agent received the methods
+      assert.ok(
+        agentReceivedMethods.includes("initialize"),
+        "Agent should have received initialize"
+      );
+      assert.ok(
+        agentReceivedMethods.includes("test/method"),
+        "Agent should have received test/method"
+      );
+
+      await conductor.shutdown();
+    });
+
+    it("should verify proxy capability handshake", async () => {
+      // Create a proxy that does NOT accept the proxy capability
+      const nonProxyComponent = createMockAgent((message, send) => {
+        if ("method" in message && "id" in message) {
+          if (message.method === "initialize") {
+            // Respond WITHOUT proxy: true in _meta
+            send({
+              jsonrpc: "2.0",
+              id: message.id,
+              result: {
+                serverInfo: { name: "non-proxy", version: "1.0" },
+                // Missing _meta.proxy: true
+              },
+            });
+          }
+        }
+      });
+
+      const agent = createEchoAgent();
+
+      const conductor = new Conductor({
+        instantiator: fromConnectors(agent, [nonProxyComponent]),
+      });
+
+      const { connector, clientSend, waitForMessage } = createTestClient();
+
+      conductor.connect(connector);
+
+      // Send initialize
+      clientSend({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
+
+      const response = await waitForMessage();
+
+      // Should get an error because the component didn't accept proxy capability
+      assert.ok((response as any).error, "Should have received error");
+      assert.ok(
+        (response as any).error.message.includes("proxy capability"),
+        "Error should mention proxy capability"
+      );
+
+      await conductor.shutdown();
+    });
+
+    it("should forward notifications through proxy chain", async () => {
+      const agentReceivedNotifications: JsonRpcMessage[] = [];
+
+      const agent: ComponentConnector = inProcess(async (connection) => {
+        for await (const message of connection.messages) {
+          if ("method" in message && !("id" in message)) {
+            agentReceivedNotifications.push(message);
+          } else if ("method" in message && "id" in message) {
+            if (message.method === "initialize") {
+              connection.send({
+                jsonrpc: "2.0",
+                id: message.id,
+                result: { serverInfo: { name: "agent", version: "1.0" } },
+              });
+            }
+          }
+        }
+      });
+
+      const proxy = createPassThroughProxy();
+
+      const conductor = new Conductor({
+        instantiator: fromConnectors(agent, [proxy]),
+      });
+
+      const { connector, clientSend, waitForMessage } = createTestClient();
+
+      conductor.connect(connector);
+
+      // Initialize
+      clientSend({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
+      await waitForMessage();
+
+      // Send notification
+      clientSend({
+        jsonrpc: "2.0",
+        method: "test/notification",
+        params: { data: "test-data" },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      assert.equal(agentReceivedNotifications.length, 1);
+      assert.equal(
+        (agentReceivedNotifications[0] as any).method,
+        "test/notification"
+      );
+      assert.deepEqual((agentReceivedNotifications[0] as any).params, {
+        data: "test-data",
+      });
+
+      await conductor.shutdown();
+    });
+
+    it("should route notifications from agent back through proxy chain to client", async () => {
+      let agentConnection: ComponentConnection | null = null;
+
+      const agent: ComponentConnector = {
+        async connect() {
+          const pair = createChannelPair();
+          agentConnection = pair.right;
+
+          // Handle messages on the agent side
+          (async () => {
+            for await (const message of pair.right.messages) {
+              if ("method" in message && "id" in message) {
+                if (message.method === "initialize") {
+                  pair.right.send({
+                    jsonrpc: "2.0",
+                    id: message.id,
+                    result: { serverInfo: { name: "agent", version: "1.0" } },
+                  });
+                }
+              }
+            }
+          })();
+
+          return pair.left;
+        },
+      };
+
+      const proxy = createPassThroughProxy();
+
+      const conductor = new Conductor({
+        instantiator: fromConnectors(agent, [proxy]),
+      });
+
+      const { connector, clientSend, waitForMessage, receivedMessages } =
+        createTestClient();
+
+      conductor.connect(connector);
+
+      // Initialize
+      clientSend({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
+      await waitForMessage();
+
+      // Agent sends a notification
+      agentConnection!.send({
+        jsonrpc: "2.0",
+        method: "agent/status",
+        params: { status: "working" },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      const notification = receivedMessages.find(
+        (m) => "method" in m && m.method === "agent/status"
+      );
+      assert.ok(notification, "Should have received notification from agent");
+      assert.deepEqual((notification as any).params, { status: "working" });
+
+      await conductor.shutdown();
+    });
+
+    it("should route messages through multiple proxies", async () => {
+      const agentReceivedMethods: string[] = [];
+
+      const agent = createMockAgent((message, send) => {
+        if ("method" in message) {
+          agentReceivedMethods.push(message.method);
+        }
+        if ("method" in message && "id" in message) {
+          if (message.method === "initialize") {
+            send({
+              jsonrpc: "2.0",
+              id: message.id,
+              result: {
+                serverInfo: { name: "agent", version: "1.0" },
+              },
+            });
+          } else {
+            send({
+              jsonrpc: "2.0",
+              id: message.id,
+              result: { finalResult: "from-agent" },
+            });
+          }
+        }
+      });
+
+      // Create two proxies
+      const proxy1 = createPassThroughProxy();
+      const proxy2 = createPassThroughProxy();
+
+      const conductor = new Conductor({
+        instantiator: fromConnectors(agent, [proxy1, proxy2]),
+      });
+
+      const { connector, clientSend, waitForMessage, receivedMessages } =
+        createTestClient();
+
+      conductor.connect(connector);
+
+      // Initialize
+      clientSend({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: { clientInfo: { name: "test", version: "1.0" } },
+      });
+
+      const initResponse = await waitForMessage();
+      assert.equal((initResponse as any).id, 1);
+      assert.ok((initResponse as any).result, "Should have init result");
+
+      // Send a request that should go through both proxies
+      clientSend({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "test/multi-proxy",
+        params: { data: "test" },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 150));
+
+      const response = receivedMessages.find((m) => (m as any).id === 2);
+      assert.ok(response, "Should have received response");
+      assert.equal(
+        (response as any).result.finalResult,
+        "from-agent",
+        "Response should be from agent"
+      );
+
+      // Verify the message went through to the agent
+      assert.ok(
+        agentReceivedMethods.includes("test/multi-proxy"),
+        "Agent should have received the method"
+      );
+
+      await conductor.shutdown();
+    });
+
+    it("should support transforming proxy that modifies requests", async () => {
+      const agentReceivedParams: any[] = [];
+
+      const agent = createMockAgent((message, send) => {
+        if ("method" in message && "id" in message) {
+          if (message.method === "initialize") {
+            send({
+              jsonrpc: "2.0",
+              id: message.id,
+              result: { serverInfo: { name: "agent", version: "1.0" } },
+            });
+          } else {
+            agentReceivedParams.push(message.params);
+            send({
+              jsonrpc: "2.0",
+              id: message.id,
+              result: { ok: true },
+            });
+          }
+        }
+      });
+
+      // Proxy that adds a "transformed: true" field to all params
+      const transformingProxy = createTransformingProxy((method, params) => ({
+        method,
+        params: { ...(params as object), transformed: true },
+      }));
+
+      const conductor = new Conductor({
+        instantiator: fromConnectors(agent, [transformingProxy]),
+      });
+
+      const { connector, clientSend, waitForMessage, receivedMessages } =
+        createTestClient();
+
+      conductor.connect(connector);
+
+      // Initialize
+      clientSend({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {},
+      });
+      await waitForMessage();
+
+      // Send a request that will be transformed
+      clientSend({
+        jsonrpc: "2.0",
+        id: 2,
+        method: "test/method",
+        params: { original: "data" },
+      });
+
+      await new Promise((resolve) => setTimeout(resolve, 100));
+
+      // Verify the agent received the transformed params
+      assert.equal(agentReceivedParams.length, 1);
+      assert.deepEqual(agentReceivedParams[0], {
+        original: "data",
+        transformed: true,
+      });
 
       await conductor.shutdown();
     });

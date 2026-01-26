@@ -27,10 +27,10 @@ This plan tracks the implementation of the TypeScript conductor. See [doc/rfd/co
 
 ## Phase 3: Proxy Support
 
-- [ ] `_proxy/successor/*` message wrapping/unwrapping
-- [ ] `_proxy/initialize` vs `initialize` differentiation
-- [ ] Multi-proxy chain routing
-- [ ] Proxy capability handshake
+- [x] `_proxy/successor/*` message wrapping/unwrapping
+- [x] `_proxy/initialize` vs `initialize` differentiation
+- [x] Multi-proxy chain routing
+- [x] Proxy capability handshake
 
 ## Phase 4: Initialization Protocol
 

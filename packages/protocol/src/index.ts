@@ -58,3 +58,21 @@ export {
   isResponseDispatch,
   createResponder,
 } from "./dispatch.js";
+
+// Proxy protocol types
+export type {
+  ProxySuccessorRequestParams,
+  ProxySuccessorNotificationParams,
+} from "./proxy-protocol.js";
+
+export {
+  PROXY_SUCCESSOR_REQUEST,
+  PROXY_SUCCESSOR_NOTIFICATION,
+  isProxySuccessorRequest,
+  isProxySuccessorNotification,
+  unwrapProxySuccessorRequest,
+  unwrapProxySuccessorNotification,
+  wrapAsProxySuccessorRequest,
+  wrapAsProxySuccessorNotification,
+  isProxyProtocolMethod,
+} from "./proxy-protocol.js";
