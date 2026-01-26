@@ -61,11 +61,6 @@ export async function createHttpListener(options: HttpListenerOptions): Promise<
   const { acpUrl, onMessage } = options;
 
   let sessionId: string | null = null;
-  let sessionIdResolver: ((id: string) => void) | null = null;
-  const sessionIdPromise = new Promise<string>((resolve) => {
-    sessionIdResolver = resolve;
-  });
-
   const connections = new Map<string, ActiveConnection>();
   let server: Server | null = null;
 
@@ -73,10 +68,17 @@ export async function createHttpListener(options: HttpListenerOptions): Promise<
   server = createServer(async (req, res) => {
     // CORS headers for local development
     res.setHeader("Access-Control-Allow-Origin", "*");
-    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS, GET");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Mcp-Session-Id");
 
     if (req.method === "OPTIONS") {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    if (req.method === "GET") {
+      // GET request is for SSE stream - return 204 to acknowledge
       res.writeHead(204);
       res.end();
       return;
@@ -89,10 +91,7 @@ export async function createHttpListener(options: HttpListenerOptions): Promise<
     }
 
     try {
-      // Wait for session ID if not yet available
-      const sid = sessionId ?? (await sessionIdPromise);
-
-      // Parse the request body
+      // Parse the request body first - don't wait for session ID
       const body = await readBody(req);
       const message = JSON.parse(body) as JsonRpcMessage;
 
@@ -102,9 +101,11 @@ export async function createHttpListener(options: HttpListenerOptions): Promise<
       let connection = connections.get("default");
       if (!connection) {
         const connectionId = randomUUID();
+        // Use a placeholder session ID - it will be set later
+        // The session ID is not needed for MCP protocol messages
         connection = {
           connectionId,
-          sessionId: sid,
+          sessionId: sessionId ?? "pending",
           pendingResponses: new Map(),
         };
         connections.set("default", connection);
@@ -113,7 +114,7 @@ export async function createHttpListener(options: HttpListenerOptions): Promise<
         onMessage({
           type: "connection-received",
           acpUrl,
-          sessionId: sid,
+          sessionId: connection.sessionId,
           connectionId,
           send: (responseData: unknown) => {
             // This is called when conductor sends a response back
@@ -153,7 +154,10 @@ export async function createHttpListener(options: HttpListenerOptions): Promise<
 
     setSessionId(id: string) {
       sessionId = id;
-      sessionIdResolver?.(id);
+      // Update any existing connections with the real session ID
+      for (const conn of connections.values()) {
+        conn.sessionId = id;
+      }
     },
 
     async close() {
@@ -223,7 +227,13 @@ async function handleMessage(
 
     // Wait for the response
     const response = await responsePromise;
-    res.writeHead(200, { "Content-Type": "application/json" });
+
+    // Return JSON-RPC response directly
+    // Include Mcp-Session-Id header per MCP Streamable HTTP spec
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Mcp-Session-Id": connection.connectionId,
+    });
     res.end(JSON.stringify(response));
   } else if (isJsonRpcNotification(message)) {
     // Create a notification dispatch

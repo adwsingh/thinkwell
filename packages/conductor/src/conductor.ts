@@ -888,6 +888,7 @@ export class Conductor {
       sessionKey
     );
 
+
     if (!hasAcpServers) {
       // No acp: servers - forward unchanged
       const target = this.getTargetConnection(targetIndex);
