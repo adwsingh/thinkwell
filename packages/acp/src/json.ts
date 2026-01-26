@@ -1,15 +1,4 @@
 /**
- * JSON value types
+ * JSON value types - re-exported from @thinkwell/protocol
  */
-export type JsonValue =
-  | string
-  | number
-  | boolean
-  | null
-  | JsonValue[]
-  | { [key: string]: JsonValue };
-
-/**
- * JSON object type
- */
-export type JsonObject = { [key: string]: JsonValue };
+export type { JsonValue, JsonObject } from "@thinkwell/protocol";

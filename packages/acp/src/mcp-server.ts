@@ -126,7 +126,7 @@ export class McpServer {
       case "tools/call":
         return this.handleToolsCall(params as McpToolsCallParams, context);
       case "initialize":
-        return this.handleInitialize();
+        return this.handleInitialize(params as { protocolVersion?: string } | undefined);
       case "notifications/initialized":
         // Client notification after initialize - no response needed
         return undefined;
@@ -135,17 +135,24 @@ export class McpServer {
     }
   }
 
-  private handleInitialize(): {
+  private handleInitialize(params?: { protocolVersion?: string }): {
     protocolVersion: string;
     serverInfo: { name: string; version: string };
     capabilities: { tools: Record<string, never> };
     instructions: string;
+    tools?: unknown[];
   } {
-    // Use protocol version 2025-03-26 to match rmcp's behavior
-    // Always include instructions to help Claude Code understand how to use tools
     const instructions = this._instructions ?? "You have access to tools. Call return_result when done.";
+
+    // Include tools directly in initialize response - some clients expect this
+    // instead of calling tools/list separately
+    const tools = this.getToolDefinitions();
+
+    // Echo back the client's protocol version if provided, otherwise use a known good version
+    const clientVersion = params?.protocolVersion ?? "2024-11-05";
+
     return {
-      protocolVersion: "2025-03-26",
+      protocolVersion: clientVersion,
       serverInfo: {
         name: this.name,
         version: "0.1.0",
@@ -154,6 +161,7 @@ export class McpServer {
         tools: {},
       },
       instructions,
+      tools,  // Include tools directly in initialize response
     };
   }
 

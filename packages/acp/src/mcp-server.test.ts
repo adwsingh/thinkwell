@@ -93,13 +93,15 @@ describe("McpServer", () => {
       .build();
 
     const context: McpContext = { connectionId: "conn-1", sessionId: "session-1" };
-    const result = await server.handleMethod("initialize", {}, context);
+    // Test with explicit protocol version
+    const result = await server.handleMethod("initialize", { protocolVersion: "2025-11-25" }, context);
 
     assert.deepStrictEqual(result, {
-      protocolVersion: "2025-03-26",
+      protocolVersion: "2025-11-25",  // Should echo back client's version
       serverInfo: { name: "test-server", version: "0.1.0" },
       capabilities: { tools: {} },
       instructions: "Test instructions",
+      tools: [],  // Empty tools array since no tools registered
     });
   });
 

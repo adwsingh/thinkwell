@@ -66,6 +66,12 @@ importers:
       '@agentclientprotocol/sdk':
         specifier: ^0.4.0
         version: 0.4.9
+      '@thinkwell/conductor':
+        specifier: workspace:*
+        version: link:../conductor
+      '@thinkwell/protocol':
+        specifier: workspace:*
+        version: link:../protocol
       uuid:
         specifier: ^11.0.3
         version: 11.1.0
@@ -102,6 +108,34 @@ importers:
         specifier: ^24.10.4
         version: 24.10.4
 
+  packages/conductor:
+    dependencies:
+      '@thinkwell/protocol':
+        specifier: workspace:*
+        version: link:../protocol
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.4
+        version: 24.10.4
+      tsx:
+        specifier: ^4.19.2
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
+  packages/protocol:
+    devDependencies:
+      '@types/node':
+        specifier: ^24.10.4
+        version: 24.10.4
+      tsx:
+        specifier: ^4.19.2
+        version: 4.21.0
+      typescript:
+        specifier: ^5.7.2
+        version: 5.9.3
+
   packages/thinkwell:
     dependencies:
       '@agentclientprotocol/sdk':
@@ -110,6 +144,9 @@ importers:
       '@thinkwell/acp':
         specifier: workspace:*
         version: link:../acp
+      '@thinkwell/conductor':
+        specifier: workspace:*
+        version: link:../conductor
     devDependencies:
       '@types/node':
         specifier: ^24.10.4
