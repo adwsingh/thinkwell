@@ -1,7 +1,7 @@
 {
-  "name": "@thinkwell/acp",
-  "version": "0.1.5",
-  "description": "TypeScript implementation of ACP (Agent Client Protocol) extensions for Thinkwell",
+  "name": "@thinkwell/conductor",
+  "version": "0.1.0",
+  "description": "TypeScript conductor for ACP proxy chains - orchestrates message routing between clients, proxies, and agents",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -23,19 +23,17 @@
     "acp",
     "mcp",
     "thinkwell",
-    "agent",
-    "llm"
+    "conductor",
+    "proxy",
+    "agent"
   ],
   "author": "David Herman",
   "license": "MIT",
   "dependencies": {
-    "@agentclientprotocol/sdk": "^0.4.0",
-    "@thinkwell/protocol": "workspace:*",
-    "uuid": "^11.0.3"
+    "@thinkwell/protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.10.4",
-    "@types/uuid": "^10.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }

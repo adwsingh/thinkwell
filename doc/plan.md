@@ -4,15 +4,15 @@ This plan tracks the implementation of the TypeScript conductor. See [doc/rfd/co
 
 ## Phase 1: Foundation
 
-- [ ] Create `@thinkwell/protocol` package with shared types
-  - [ ] Extract MCP-over-ACP types from `@thinkwell/acp`
-  - [ ] Add JSON-RPC base types
-  - [ ] Add `Dispatch` and `Responder` types
-- [ ] Create `@thinkwell/conductor` package skeleton
-  - [ ] Package.json, tsconfig, basic structure
-- [ ] Implement `MessageQueue` with async iteration
-- [ ] Implement `StdioConnector` for subprocess spawning
-- [ ] Implement `ChannelConnector` for in-memory connections
+- [x] Create `@thinkwell/protocol` package with shared types
+  - [x] Extract MCP-over-ACP types from `@thinkwell/acp`
+  - [x] Add JSON-RPC base types
+  - [x] Add `Dispatch` and `Responder` types
+- [x] Create `@thinkwell/conductor` package skeleton
+  - [x] Package.json, tsconfig, basic structure
+- [x] Implement `MessageQueue` with async iteration
+- [x] Implement `StdioConnector` for subprocess spawning
+- [x] Implement `ChannelConnector` for in-memory connections
 
 ## Phase 2: Basic Routing
 
@@ -48,7 +48,7 @@ This plan tracks the implementation of the TypeScript conductor. See [doc/rfd/co
 
 ## Phase 6: Integration
 
-- [ ] Update `@thinkwell/acp` to use `@thinkwell/protocol`
+- [x] Update `@thinkwell/acp` to use `@thinkwell/protocol`
 - [ ] Add in-process conductor option to `SacpConnection`
 - [ ] Integration tests with real agent
 - [ ] Comparison tests vs Rust conductor behavior

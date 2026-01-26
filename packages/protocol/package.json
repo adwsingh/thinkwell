@@ -1,7 +1,7 @@
 {
-  "name": "@thinkwell/acp",
-  "version": "0.1.5",
-  "description": "TypeScript implementation of ACP (Agent Client Protocol) extensions for Thinkwell",
+  "name": "@thinkwell/protocol",
+  "version": "0.1.0",
+  "description": "Shared protocol types for Thinkwell packages (JSON-RPC, MCP-over-ACP, Dispatch)",
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -23,19 +23,13 @@
     "acp",
     "mcp",
     "thinkwell",
-    "agent",
-    "llm"
+    "json-rpc",
+    "protocol"
   ],
   "author": "David Herman",
   "license": "MIT",
-  "dependencies": {
-    "@agentclientprotocol/sdk": "^0.4.0",
-    "@thinkwell/protocol": "workspace:*",
-    "uuid": "^11.0.3"
-  },
   "devDependencies": {
     "@types/node": "^24.10.4",
-    "@types/uuid": "^10.0.0",
     "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
