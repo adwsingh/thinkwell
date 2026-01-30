@@ -6,24 +6,7 @@ import { dirname, join } from "node:path";
 import { existsSync } from "node:fs";
 import { createGenerator, type Config } from "ts-json-schema-generator";
 import type { TypeInfo } from "./transform.js";
-
-/**
- * Find tsconfig.json by walking up from the given directory.
- */
-function findTsConfig(startDir: string): string | undefined {
-  let dir = startDir;
-  while (true) {
-    const configPath = join(dir, "tsconfig.json");
-    if (existsSync(configPath)) {
-      return configPath;
-    }
-    const parent = dirname(dir);
-    if (parent === dir) {
-      return undefined;
-    }
-    dir = parent;
-  }
-}
+import { programCache, findTsConfig } from "./program-cache.js";
 
 /**
  * Recursively inline $ref references to make schemas self-contained.
@@ -66,13 +49,18 @@ function inlineRefs(
 /**
  * Generate JSON schemas for the given types using ts-json-schema-generator.
  *
+ * This function uses a cached generator when possible, significantly improving
+ * performance for projects with multiple files containing @JSONSchema types.
+ *
  * @param path - The path to the TypeScript file
  * @param types - The types to generate schemas for
+ * @param useCache - Whether to use the program cache (default: true)
  * @returns Map from type name to JSON schema object
  */
 export function generateSchemas(
   path: string,
-  types: TypeInfo[]
+  types: TypeInfo[],
+  useCache: boolean = true
 ): Map<string, object> {
   const schemas = new Map<string, object>();
 
@@ -80,17 +68,10 @@ export function generateSchemas(
     return schemas;
   }
 
-  // Find tsconfig.json for proper type resolution
-  const configPath = findTsConfig(dirname(path));
-
-  const config: Config = {
-    path,
-    ...(configPath && { tsconfig: configPath }),
-    skipTypeCheck: true,
-    encodeRefs: false,
-  };
-
-  const generator = createGenerator(config);
+  // Get or create a generator - uses cache for better performance
+  const generator = useCache
+    ? programCache.getGenerator(path)
+    : createUncachedGenerator(path);
 
   for (const { name } of types) {
     try {
@@ -105,7 +86,7 @@ export function generateSchemas(
 
       // Remove the $schema and definitions properties from root if present
       if (typeof result === "object" && result !== null) {
-        const cleaned = { ...result as Record<string, unknown> };
+        const cleaned = { ...(result as Record<string, unknown>) };
         delete cleaned["$schema"];
         delete cleaned["definitions"];
         schemas.set(name, cleaned as object);
@@ -122,4 +103,36 @@ export function generateSchemas(
   }
 
   return schemas;
+}
+
+/**
+ * Create an uncached generator for a single file.
+ * Used when caching is disabled or for testing.
+ */
+function createUncachedGenerator(path: string) {
+  const configPath = findTsConfig(dirname(path));
+
+  const config: Config = {
+    path,
+    ...(configPath && { tsconfig: configPath }),
+    skipTypeCheck: true,
+    encodeRefs: false,
+  };
+
+  return createGenerator(config);
+}
+
+/**
+ * Invalidate the program cache for a file's project.
+ * Call this when a TypeScript file is modified.
+ */
+export function invalidateProgramCache(filePath: string): void {
+  programCache.invalidateForFile(filePath);
+}
+
+/**
+ * Clear the entire program cache.
+ */
+export function clearProgramCache(): void {
+  programCache.clear();
 }

@@ -31,13 +31,12 @@ This plan tracks the implementation of the `thinkwell` CLI and Bun plugin for au
 
 ## Phase 4: Cross-File Types
 
-- [ ] Use `ts.createProgram()` for full type resolution
-- [ ] Handle imported types with `@JSONSchema`
-- [ ] Cache TypeScript program for performance
+- [x] Cross-file type resolution (already works via ts-json-schema-generator + tsconfig)
+- [x] Handle imported types with `@JSONSchema`
+- [x] Cache TypeScript program for performance (ProgramCache class)
 
 ## Phase 5: Polish
 
 - [ ] Error messages and diagnostics
-- [ ] Source map support (if needed)
 - [ ] Performance profiling and optimization
 - [ ] Documentation and examples

@@ -182,3 +182,13 @@ export {
   watchDeclarations,
   type WatcherOptions,
 } from "./watcher.js";
+
+// Schema generation utilities
+export {
+  generateSchemas,
+  invalidateProgramCache,
+  clearProgramCache,
+} from "./schema-generator.js";
+
+// Program cache for performance
+export { ProgramCache, programCache, findTsConfig } from "./program-cache.js";
