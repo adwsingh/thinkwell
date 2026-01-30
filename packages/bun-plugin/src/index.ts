@@ -32,6 +32,7 @@ import { findMarkedTypes, type TypeInfo } from "./transform.js";
 import { generateSchemas } from "./schema-generator.js";
 import { generateInjections } from "./codegen.js";
 import { SchemaCache } from "./schema-cache.js";
+import { THINKWELL_MODULES } from "./modules.js";
 
 const JSONSCHEMA_TAG = "@JSONSchema";
 
@@ -44,6 +45,27 @@ export const thinkwellPlugin: BunPlugin = {
   name: "thinkwell-schema",
 
   setup(build) {
+    // Handle thinkwell:* URI scheme imports
+    build.onResolve({ filter: /^thinkwell:/ }, (args) => {
+      const moduleName = args.path.replace("thinkwell:", "");
+      const npmPackage = THINKWELL_MODULES[moduleName];
+
+      if (!npmPackage) {
+        throw new Error(
+          `Unknown thinkwell module: "${args.path}". ` +
+            `Available modules: ${Object.keys(THINKWELL_MODULES)
+              .map((m) => `thinkwell:${m}`)
+              .join(", ")}`
+        );
+      }
+
+      // Resolve to the npm package - Bun will handle the actual resolution
+      return {
+        path: npmPackage,
+        external: true,
+      };
+    });
+
     build.onLoad({ filter: /\.tsx?$/ }, async ({ path }) => {
       const source = await Bun.file(path).text();
 
@@ -99,3 +121,4 @@ plugin(thinkwellPlugin);
 
 export default thinkwellPlugin;
 export type { TypeInfo } from "./transform.js";
+export { THINKWELL_MODULES } from "./modules.js";
