@@ -4,11 +4,11 @@ This plan tracks the implementation of the `thinkwell` CLI and Bun plugin for au
 
 ## Phase 1: Core Plugin
 
-- [ ] Create `@thinkwell/bun-plugin` package structure
-- [ ] Implement `onLoad` hook with `@JSONSchema` detection
-- [ ] Integrate ts-json-schema-generator for schema extraction
-- [ ] Generate namespace injections
-- [ ] Add basic mtime-based caching
+- [x] Create `@thinkwell/bun-plugin` package structure
+- [x] Implement `onLoad` hook with `@JSONSchema` detection
+- [x] Integrate ts-json-schema-generator for schema extraction
+- [x] Generate namespace injections
+- [x] Add basic mtime-based caching
 
 ## Phase 2: CLI
 
