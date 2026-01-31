@@ -95,9 +95,11 @@ export function generateSchemas(
       }
     } catch (error) {
       // Log warning but continue with other types
+      const message = error instanceof Error ? error.message : String(error);
       console.warn(
-        `[@thinkwell/bun-plugin] Failed to generate schema for ${name}:`,
-        error instanceof Error ? error.message : error
+        `[@thinkwell/bun-plugin] Failed to generate schema for "${name}" in ${path}\n` +
+          `  Error: ${message}\n` +
+          `  Hint: Ensure the type is valid and doesn't use unsupported TypeScript features`
       );
     }
   }

@@ -96,17 +96,29 @@ export class ProgramCache {
     }
 
     // Create a new project-wide generator
-    const generator = this.createProjectGenerator(tsconfigPath);
-    const tsconfigMtime = this.getMtime(tsconfigPath)!;
+    try {
+      const generator = this.createProjectGenerator(tsconfigPath);
+      const tsconfigMtime = this.getMtime(tsconfigPath)!;
 
-    this.cache.set(tsconfigPath, {
-      generator,
-      tsconfigPath,
-      tsconfigMtime,
-      createdAt: Date.now(),
-    });
+      this.cache.set(tsconfigPath, {
+        generator,
+        tsconfigPath,
+        tsconfigMtime,
+        createdAt: Date.now(),
+      });
 
-    return generator;
+      return generator;
+    } catch (error) {
+      // If project-wide generator fails, fall back to single-file generator
+      const message = error instanceof Error ? error.message : String(error);
+      console.warn(
+        `[@thinkwell/bun-plugin] Failed to create project-wide schema generator\n` +
+          `  tsconfig: ${tsconfigPath}\n` +
+          `  Error: ${message}\n` +
+          `  Falling back to single-file mode (cross-file type resolution may not work)`
+      );
+      return this.createSingleFileGenerator(filePath);
+    }
   }
 
   /**

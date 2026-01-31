@@ -62,24 +62,29 @@ export interface WatcherOptions {
  */
 export class DeclarationWatcher {
   private rootDir: string;
-  private include: string[];
-  private exclude: string[];
   private onWrite?: (sourceFile: string, declFile: string) => void;
   private onRemove?: (sourceFile: string, declFile: string) => void;
   private onError?: (error: Error, sourceFile: string) => void;
   private debounceMs: number;
+
+  // Pre-compiled glob patterns for performance
+  private includeGlobs: Glob[];
+  private excludeGlobs: Glob[];
 
   private watcher: FSWatcher | null = null;
   private pendingUpdates = new Map<string, NodeJS.Timeout>();
 
   constructor(options: WatcherOptions = {}) {
     this.rootDir = options.rootDir ?? process.cwd();
-    this.include = options.include ?? ["**/*.ts", "**/*.tsx"];
-    this.exclude = options.exclude ?? [
+    const include = options.include ?? ["**/*.ts", "**/*.tsx"];
+    const exclude = options.exclude ?? [
       "node_modules/**",
       "**/*.d.ts",
       "**/*.thinkwell.d.ts",
     ];
+    // Pre-compile glob patterns once for better performance
+    this.includeGlobs = include.map((pattern) => new Glob(pattern));
+    this.excludeGlobs = exclude.map((pattern) => new Glob(pattern));
     this.onWrite = options.onWrite;
     this.onRemove = options.onRemove;
     this.onError = options.onError;
@@ -92,21 +97,19 @@ export class DeclarationWatcher {
   private shouldProcess(filePath: string): boolean {
     const relativePath = relative(this.rootDir, filePath);
 
-    // Check if matches any include pattern
-    const matchesInclude = this.include.some((pattern) => {
-      const glob = new Glob(pattern);
-      return glob.match(relativePath);
-    });
+    // Check if matches any include pattern (using pre-compiled globs)
+    const matchesInclude = this.includeGlobs.some((glob) =>
+      glob.match(relativePath)
+    );
 
     if (!matchesInclude) {
       return false;
     }
 
-    // Check if matches any exclude pattern
-    const matchesExclude = this.exclude.some((pattern) => {
-      const glob = new Glob(pattern);
-      return glob.match(relativePath);
-    });
+    // Check if matches any exclude pattern (using pre-compiled globs)
+    const matchesExclude = this.excludeGlobs.some((glob) =>
+      glob.match(relativePath)
+    );
 
     return !matchesExclude;
   }

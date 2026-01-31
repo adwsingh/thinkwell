@@ -10,16 +10,17 @@
 import { execSync, spawn } from "node:child_process";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { existsSync } from "node:fs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Check if Bun is available
-function isBunAvailable() {
+// Check if Bun is available and return version or null
+function getBunVersion() {
   try {
-    execSync("bun --version", { stdio: "ignore" });
-    return true;
+    const version = execSync("bun --version", { encoding: "utf-8" }).trim();
+    return version;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -32,6 +33,30 @@ function getPluginPath() {
 // Get the path to the types command script
 function getTypesCommandPath() {
   return resolve(__dirname, "../dist/types-command.js");
+}
+
+// Validate that required files exist
+function validateInstallation() {
+  const pluginPath = getPluginPath();
+  const typesCommandPath = getTypesCommandPath();
+  const errors = [];
+
+  if (!existsSync(pluginPath)) {
+    errors.push(`Plugin not found: ${pluginPath}`);
+  }
+
+  if (!existsSync(typesCommandPath)) {
+    errors.push(`Types command not found: ${typesCommandPath}`);
+  }
+
+  if (errors.length > 0) {
+    console.error("Error: thinkwell installation appears to be corrupted.");
+    for (const error of errors) {
+      console.error(`  - ${error}`);
+    }
+    console.error("\nTry reinstalling with: npm install -g @thinkwell/cli");
+    process.exit(1);
+  }
 }
 
 // Parse version from package.json
@@ -88,11 +113,19 @@ async function main() {
   }
 
   // Check for Bun
-  if (!isBunAvailable()) {
-    console.error("Error: Bun is required but not found.");
-    console.error("Install it from: https://bun.sh");
+  const bunVersion = getBunVersion();
+  if (!bunVersion) {
+    console.error("Error: Bun is required but not found in PATH.");
+    console.error("");
+    console.error("To install Bun:");
+    console.error("  curl -fsSL https://bun.sh/install | bash");
+    console.error("");
+    console.error("Or visit: https://bun.sh");
     process.exit(1);
   }
+
+  // Validate installation
+  validateInstallation();
 
   // Handle "types" subcommand
   if (args[0] === "types") {
@@ -106,7 +139,13 @@ async function main() {
     });
 
     child.on("error", (err) => {
-      console.error(`Failed to start bun: ${err.message}`);
+      console.error(`Error: Failed to execute 'bun' command.`);
+      console.error(`  ${err.message}`);
+      if (err.code === "ENOENT") {
+        console.error("");
+        console.error("Bun was detected but cannot be executed.");
+        console.error("Ensure 'bun' is in your PATH and has execute permissions.");
+      }
       process.exit(1);
     });
 
@@ -126,6 +165,19 @@ async function main() {
     process.exit(0);
   }
 
+  // Check if the script file exists
+  const scriptPath = runArgs[0];
+  if (!scriptPath.startsWith("-") && !existsSync(scriptPath)) {
+    // Try resolving relative to cwd
+    const resolvedPath = resolve(process.cwd(), scriptPath);
+    if (!existsSync(resolvedPath)) {
+      console.error(`Error: Script not found: ${scriptPath}`);
+      console.error("");
+      console.error("Make sure the file exists and the path is correct.");
+      process.exit(1);
+    }
+  }
+
   // Delegate to bun with plugin preloaded
   const pluginPath = getPluginPath();
   const bunArgs = ["--preload", pluginPath, ...runArgs];
@@ -136,7 +188,13 @@ async function main() {
   });
 
   child.on("error", (err) => {
-    console.error(`Failed to start bun: ${err.message}`);
+    console.error(`Error: Failed to execute 'bun' command.`);
+    console.error(`  ${err.message}`);
+    if (err.code === "ENOENT") {
+      console.error("");
+      console.error("Bun was detected but cannot be executed.");
+      console.error("Ensure 'bun' is in your PATH and has execute permissions.");
+    }
     process.exit(1);
   });
 

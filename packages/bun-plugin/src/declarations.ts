@@ -181,22 +181,33 @@ export async function generateDeclarations(
 
   const generatedFiles: string[] = [];
 
+  // Pre-compile exclude patterns for better performance
+  const excludeGlobs = exclude.map((pattern) => new Glob(pattern));
+
   for (const pattern of include) {
     const glob = new Glob(pattern);
     for await (const file of glob.scan({ cwd: rootDir, absolute: true })) {
-      // Check if file matches any exclude pattern
+      // Check if file matches any exclude pattern (using pre-compiled globs)
       const relativePath = relative(rootDir, file);
-      const shouldExclude = exclude.some((excludePattern) => {
-        const excludeGlob = new Glob(excludePattern);
-        return excludeGlob.match(relativePath);
-      });
+      const shouldExclude = excludeGlobs.some((excludeGlob) =>
+        excludeGlob.match(relativePath)
+      );
 
       if (shouldExclude) {
         continue;
       }
 
       try {
-        const source = await Bun.file(file).text();
+        let source: string;
+        try {
+          source = await Bun.file(file).text();
+        } catch (readError) {
+          const err = new Error(
+            `Failed to read file: ${readError instanceof Error ? readError.message : String(readError)}`
+          );
+          onError?.(err, file);
+          continue;
+        }
 
         // Fast path: skip files without @JSONSchema
         if (!source.includes("@JSONSchema")) {
@@ -208,13 +219,22 @@ export async function generateDeclarations(
           continue;
         }
 
-        const declPath = await writeDeclarationFile(file, types);
-        if (declPath) {
-          generatedFiles.push(declPath);
-          onWrite?.(file, declPath);
+        try {
+          const declPath = await writeDeclarationFile(file, types);
+          if (declPath) {
+            generatedFiles.push(declPath);
+            onWrite?.(file, declPath);
+          }
+        } catch (writeError) {
+          const err = new Error(
+            `Failed to write declaration file: ${writeError instanceof Error ? writeError.message : String(writeError)}`
+          );
+          onError?.(err, file);
         }
       } catch (error) {
-        onError?.(error as Error, file);
+        // Catch any other unexpected errors (e.g., in findMarkedTypes)
+        const err = error instanceof Error ? error : new Error(String(error));
+        onError?.(err, file);
       }
     }
   }

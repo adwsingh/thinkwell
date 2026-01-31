@@ -37,6 +37,6 @@ This plan tracks the implementation of the `thinkwell` CLI and Bun plugin for au
 
 ## Phase 5: Polish
 
-- [ ] Error messages and diagnostics
-- [ ] Performance profiling and optimization
-- [ ] Documentation and examples
+- [x] Error messages and diagnostics
+- [x] Performance profiling and optimization
+- [x] Documentation and examples

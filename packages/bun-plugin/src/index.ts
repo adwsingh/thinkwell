@@ -59,15 +59,29 @@ function extractShebang(source: string): [string, string] {
 }
 
 /**
- * Transpile TypeScript/TSX to JavaScript.
+ * Transpile TypeScript/TSX to JavaScript with error handling.
  *
  * Due to a Bun bug (as of 1.2.x), returning `loader: "ts"` from onLoad
  * doesn't properly transpile TypeScript in runtime plugins. As a workaround,
  * we use Bun.Transpiler to manually convert to JS before returning.
+ *
+ * @param source - The TypeScript source code
+ * @param loader - The loader type ("ts" or "tsx")
+ * @param filePath - The file path (for error messages)
+ * @throws Error with helpful message if transpilation fails
  */
-function transpile(source: string, loader: "ts" | "tsx"): string {
-  const transpiler = new Bun.Transpiler({ loader });
-  return transpiler.transformSync(source);
+function safeTranspile(source: string, loader: "ts" | "tsx", filePath: string): string {
+  try {
+    const transpiler = new Bun.Transpiler({ loader });
+    return transpiler.transformSync(source);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    throw new Error(
+      `[@thinkwell/bun-plugin] Failed to transpile: ${filePath}\n` +
+        `  Error: ${message}\n` +
+        `  Hint: Check for syntax errors in the file`
+    );
+  }
 }
 
 /**
@@ -83,11 +97,13 @@ export const thinkwellPlugin: BunPlugin = {
       const npmPackage = THINKWELL_MODULES[moduleName];
 
       if (!npmPackage) {
+        const available = Object.keys(THINKWELL_MODULES)
+          .map((m) => `thinkwell:${m}`)
+          .join(", ");
         throw new Error(
-          `Unknown thinkwell module: "${args.path}". ` +
-            `Available modules: ${Object.keys(THINKWELL_MODULES)
-              .map((m) => `thinkwell:${m}`)
-              .join(", ")}`
+          `[@thinkwell/bun-plugin] Unknown module: "${args.path}"\n` +
+            `  Available modules: ${available}\n` +
+            `  Imported from: ${args.importer || "unknown"}`
         );
       }
 
@@ -99,7 +115,18 @@ export const thinkwellPlugin: BunPlugin = {
     });
 
     build.onLoad({ filter: /\.tsx?$/ }, async ({ path }) => {
-      const rawSource = await Bun.file(path).text();
+      // Read file with error handling
+      let rawSource: string;
+      try {
+        rawSource = await Bun.file(path).text();
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        throw new Error(
+          `[@thinkwell/bun-plugin] Failed to read file: ${path}\n` +
+            `  Error: ${message}`
+        );
+      }
+
       const loader = path.endsWith(".tsx") ? "tsx" : "ts";
 
       // Extract shebang if present - we'll strip it since we're transpiling to JS
@@ -108,12 +135,19 @@ export const thinkwellPlugin: BunPlugin = {
       // Fast path: skip files without @JSONSchema
       if (!source.includes(JSONSCHEMA_TAG)) {
         // Transpile to JS as a workaround for Bun's loader bug
-        return { contents: transpile(source, loader), loader: "js" };
+        return { contents: safeTranspile(source, loader, path), loader: "js" };
       }
 
       // Check cache (use rawSource mtime, but process without shebang)
-      const stat = Bun.file(path);
-      const mtime = (await stat.stat()).mtime.getTime();
+      let mtime: number;
+      try {
+        const stat = await Bun.file(path).stat();
+        mtime = stat.mtime.getTime();
+      } catch (error) {
+        // If stat fails, use current time (no caching for this run)
+        mtime = Date.now();
+      }
+
       const cached = schemaCache.get(path, mtime);
 
       let markedTypes: TypeInfo[];
@@ -127,7 +161,7 @@ export const thinkwellPlugin: BunPlugin = {
         markedTypes = findMarkedTypes(path, source);
 
         if (markedTypes.length === 0) {
-          return { contents: transpile(source, loader), loader: "js" };
+          return { contents: safeTranspile(source, loader, path), loader: "js" };
         }
 
         // Generate schemas using ts-json-schema-generator
@@ -138,7 +172,7 @@ export const thinkwellPlugin: BunPlugin = {
       }
 
       if (markedTypes.length === 0) {
-        return { contents: transpile(source, loader), loader: "js" };
+        return { contents: safeTranspile(source, loader, path), loader: "js" };
       }
 
       // Generate namespace insertions positioned right after each type
@@ -152,7 +186,7 @@ export const thinkwellPlugin: BunPlugin = {
 
       // Transpile the modified source to JS
       return {
-        contents: transpile(modifiedSource, loader),
+        contents: safeTranspile(modifiedSource, loader, path),
         loader: "js",
       };
     });
