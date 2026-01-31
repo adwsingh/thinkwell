@@ -290,11 +290,11 @@ The plugin uses mtime-based caching to avoid regenerating schemas for unchanged 
 
 ## Limitations
 
-### 1. Bun-Only
+### 1. Bun Runtime Required
 
-This approach only works with Bun. Users of Node.js, Deno, or other runtimes must use the existing `build-schema-providers` approach.
+While the `thinkwell` CLI can be invoked via Node.js (the launcher script is a Node.js ES module), it delegates to Bun for actual script execution. Users must have Bun installed.
 
-**Mitigation**: The build tool remains available. This plugin is an additional convenience, not a replacement.
+For environments where Bun is not available, the existing `build-schema-providers` approach remains available as a build-time alternative.
 
 ### 2. Cross-File Type Resolution
 
