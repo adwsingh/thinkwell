@@ -22,7 +22,7 @@ describe("generateInjections", () => {
     const result = generateInjections(types, schemas);
 
     expect(result).toContain("namespace Greeting");
-    expect(result).toContain("export const Schema: SchemaProvider<Greeting>");
+    expect(result).toContain("export const Schema: $$__thinkwell__acp__$$.SchemaProvider<Greeting>");
     expect(result).toContain("toJsonSchema: ()");
     expect(result).toContain('"type": "object"');
     expect(result).toContain('"message": {');
@@ -42,8 +42,8 @@ describe("generateInjections", () => {
 
     expect(result).toContain("namespace Greeting");
     expect(result).toContain("namespace Farewell");
-    expect(result).toContain("SchemaProvider<Greeting>");
-    expect(result).toContain("SchemaProvider<Farewell>");
+    expect(result).toContain("$$__thinkwell__acp__$$.SchemaProvider<Greeting>");
+    expect(result).toContain("$$__thinkwell__acp__$$.SchemaProvider<Farewell>");
   });
 
   test("returns empty string for empty types array", () => {
@@ -60,14 +60,14 @@ describe("generateInjections", () => {
     expect(result).not.toContain("namespace Missing");
   });
 
-  test("includes import for SchemaProvider", () => {
+  test("includes namespace import for @thinkwell/acp", () => {
     const types: TypeInfo[] = [{ name: "Test", node: {} as any }];
     const schemas = new Map<string, object>([["Test", { type: "string" }]]);
 
     const result = generateInjections(types, schemas);
 
     expect(result).toContain(
-      'import type { SchemaProvider, JsonSchema } from "@thinkwell/acp"'
+      'import type * as $$__thinkwell__acp__$$ from "@thinkwell/acp"'
     );
   });
 
