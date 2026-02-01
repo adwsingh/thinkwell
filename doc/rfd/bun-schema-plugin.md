@@ -305,26 +305,7 @@ For environments where Bun is not available, the existing `build-schema-provider
 
 Types that extend or reference types from other files are supported via `ts-json-schema-generator`'s program-based resolution. The plugin caches the TypeScript program per-project to minimize overhead.
 
-### 3. Declaration Merging Complexity
-
-TypeScript's namespace declaration merging has edge cases:
-
-```typescript
-// User's code
-interface Greeting { message: string; }
-namespace Greeting {
-  export function create(): Greeting { return { message: "hi" }; }
-}
-
-// Plugin adds
-namespace Greeting {
-  export const Schema: SchemaProvider<Greeting> = { ... };
-}
-```
-
-This should work (namespaces merge), but needs testing with various patterns.
-
-### 4. Source Maps
+### 3. Source Maps
 
 Injecting code at the end of the file may affect source map accuracy for errors in injected code. This is acceptable since:
 - Errors in generated code are rare
