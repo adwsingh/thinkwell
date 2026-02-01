@@ -5,6 +5,9 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
+  "bin": {
+    "thinkwell": "./bin/thinkwell"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
@@ -15,7 +18,11 @@
       "import": "./dist/connectors/index.js"
     }
   },
+  "engines": {
+    "node": ">=18"
+  },
   "files": [
+    "bin",
     "dist"
   ],
   "scripts": {
@@ -34,7 +41,9 @@
   "dependencies": {
     "@agentclientprotocol/sdk": "^0.12.0",
     "@thinkwell/acp": "workspace:*",
-    "@thinkwell/conductor": "workspace:*"
+    "@thinkwell/bun-plugin": "workspace:*",
+    "@thinkwell/conductor": "workspace:*",
+    "@thinkwell/protocol": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^24.10.4",

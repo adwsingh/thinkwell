@@ -2,42 +2,24 @@
 
 Based on [RFD: CLI Distribution](rfd/cli-distribution.md)
 
-## Current State
+## Phase 1: Core npm Package
 
-- `thinkwell` npm package (packages/thinkwell) — Core library
-- `@thinkwell/cli` npm package (packages/cli) — CLI with Node.js launcher that delegates to Bun
-- CLI already implements: `run`, `types`, `--help`, `--version`, Bun detection
+- [x] Create `thinkwell` package structure with Node-compatible CLI entry point
+- [x] Implement argument parsing for core commands (`run`, `init`, `types`, `--help`, `--version`)
+- [x] Implement Bun runtime detection with helpful error messages
+- [x] Implement `run` command that spawns Bun with the thinkwell plugin
+- [x] Implement `init` command for project scaffolding (no Bun required)
+- [x] Add `engines` field requiring Node >= 18
+- [ ] Publish to npm under the `thinkwell` package name
 
-## Problem
-
-The RFD calls for `npx thinkwell` to invoke the CLI, but:
-- The `thinkwell` package is the library, not the CLI
-- The CLI is published as `@thinkwell/cli`, requiring `npx @thinkwell/cli`
-
-## Phase 1: Package Restructuring (Thin Wrapper)
-
-Add CLI bin to `thinkwell` package that re-exports `@thinkwell/cli`:
-
-- [ ] Add `bin/thinkwell.js` wrapper script to packages/thinkwell
-- [ ] Add `@thinkwell/cli` as dependency of `thinkwell`
-- [ ] Add `bin` field to packages/thinkwell/package.json
-- [ ] Test `npx thinkwell` experience locally
-
-## Phase 2: CLI Enhancements
-
-- [ ] Implement `init` command for project scaffolding (no Bun required)
-- [ ] Improve Bun-not-found error message per RFD spec
-- [ ] Add `build` command (deferred to future PR)
-- [ ] Add `check` command (deferred to future PR)
-
-## Phase 3: Homebrew Distribution
+## Phase 2: Homebrew Distribution
 
 - [ ] Create `homebrew-thinkwell` repository
 - [ ] Write npm-based Homebrew formula with Bun caveat
 - [ ] Test installation via `brew tap` and `brew install`
 - [ ] Document Homebrew installation in README
 
-## Phase 4: Documentation
+## Phase 3: Documentation
 
 - [ ] Write installation guide with tabbed package manager examples
 - [ ] Frame Bun requirement as feature (TypeScript-native, schema generation, compiled executables)
