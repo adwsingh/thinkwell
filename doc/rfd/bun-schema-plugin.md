@@ -399,6 +399,22 @@ curl -fsSL https://thinkwell.dev/install.sh | bash
 
 **Decision**: Deferred. npm distribution is sufficient for initial release. Standalone binaries can be added later for CI/CD use cases.
 
+### 6. Namespace-Scoped Imports
+
+Place the `import type` statement inside the generated namespace to avoid polluting the module scope:
+
+```typescript
+namespace Greeting {
+  import type { SchemaProvider, JsonSchema } from "@thinkwell/acp";
+  export const Schema: SchemaProvider<Greeting> = { ... };
+}
+```
+
+**Pros**: No risk of name collisions with user code
+**Cons**: TypeScript prohibits import declarations inside namespaces that reference external modules (error TS1147)
+
+**Decision**: Rejected due to TypeScript language constraints. Instead, we use a mangled namespace import (`$$__thinkwell__acp__$$`) at module scope to minimize collision risk.
+
 ## Package Structure
 
 ```
