@@ -2,7 +2,7 @@
 
 ## Summary
 
-This document proposes a `thinkwell` CLI and accompanying Bun plugin that automatically generates JSON Schema definitions from TypeScript types marked with `@JSONSchema`, eliminating the need for separate schema files or explicit build steps. The CLI wraps Bun with the plugin pre-configured, enabling a zero-configuration scripting experience.
+This document proposes a `thinkwell` CLI and accompanying Bun plugin that automatically generates JSON Schema definitions from TypeScript types marked with `@JSONSchema`, eliminating the need for separate schema files or explicit build steps. The CLI wraps Bun with the plugin pre-configured, providing a zero-configuration development experience for both standalone scripts and larger projects.
 
 ## Motivation
 
@@ -30,11 +30,11 @@ Users must:
 2. Import the generated schema from a companion file
 3. Wire up the namespace manually
 
-This friction is acceptable for larger projects but creates unnecessary ceremony for quick scripts and prototypes.
+This friction creates unnecessary ceremony for development workflows.
 
-### Vision: Scripting with Thinkwell
+### Vision: Zero-Configuration Development
 
-With Bun gaining traction as an AI runtime (recently acquired by Anthropic), there's an opportunity to make thinkwell scripts as simple as:
+With Bun gaining traction as an AI runtime (recently acquired by Anthropic), there's an opportunity to eliminate this ceremony entirely. The `thinkwell` CLI provides a unified runtime that works identically for standalone scripts and larger projects:
 
 ```typescript
 #!/usr/bin/env thinkwell
@@ -69,11 +69,21 @@ chmod +x hello.ts
 ./hello.ts
 ```
 
-No build step. No configuration files. No generated files. No `package.json` required. The schema materializes automatically, and thinkwell modules are built-in.
+No build step. No configuration files. No generated files. The schema materializes automatically, and thinkwell modules are built-in.
+
+This same code works identically whether it's a standalone script or part of a larger project with `package.json`. The only differences between scripts and projects are:
+
+| Aspect | Script (no manifest) | Project (with manifest) |
+|--------|---------------------|------------------------|
+| Invocation | `#!/usr/bin/env thinkwell` or `thinkwell script.ts` | `thinkwell src/main.ts` |
+| Dependencies | Built-in only (`thinkwell:*`) | Built-in + npm packages |
+| Type checking | Via `thinkwell types` | Via `thinkwell types` or tsconfig integration |
+
+Adding a `package.json` doesn't require changing your imports or switching runtimes—the `thinkwell` CLI remains the primary way to run thinkwell code.
 
 ### The `thinkwell:*` URI Scheme
 
-Thinkwell scripts use a custom URI scheme for imports, similar to Node.js's `node:*` and Bun's `bun:*` built-in modules:
+Thinkwell code uses a custom URI scheme for imports, similar to Node.js's `node:*` and Bun's `bun:*` built-in modules:
 
 ```typescript
 import { Agent } from "thinkwell:agent";
@@ -83,12 +93,22 @@ import type { SchemaProvider } from "thinkwell:acp";
 
 This design provides several benefits:
 
-1. **Zero configuration**: Users don't need a `package.json` or `node_modules` - modules are built into the runtime
+1. **Zero configuration**: Scripts don't need a `package.json` or `node_modules`; projects can use `thinkwell:*` alongside npm dependencies
 2. **Explicit built-in signal**: The `thinkwell:` prefix clearly indicates these are provided by the runtime, not user dependencies
 3. **Familiar pattern**: Follows the established convention of `node:fs`, `bun:test`, etc.
 4. **Version consistency**: All thinkwell modules are versioned together with the CLI
 
 The plugin registers an `onResolve` hook that intercepts `thinkwell:*` imports and resolves them to bundled modules shipped with the CLI.
+
+#### When to Use npm-Style Imports
+
+While `thinkwell:*` URIs are the recommended approach, there are valid reasons to use npm-style imports (`@thinkwell/agent` instead of `thinkwell:agent`):
+
+1. **IDE type acquisition** — If your editor doesn't have the thinkwell TS plugin (see Future Work), npm packages provide types automatically via `node_modules`
+2. **Bundling for non-Bun targets** — Standard imports work with any bundler when targeting Node.js or browsers
+3. **Explicit version pinning** — `package.json` gives fine-grained control over exact versions
+
+These are opt-in trade-offs for specific use cases, not the default path.
 
 ## Design Goals
 
@@ -174,7 +194,7 @@ This is the recommended approach for most users.
 
 #### Alternative: Direct Bun Integration
 
-For users who want to integrate the plugin into an existing Bun workflow:
+For advanced users who want to use `bun` directly (without the `thinkwell` CLI wrapper) or integrate schema generation into an existing Bun workflow:
 
 **bunfig.toml:**
 ```toml
@@ -364,9 +384,9 @@ const GreetingSchema = schemaFor<Greeting>();  // Evaluated at bundle time
 Continue requiring `build-schema-providers` for all use cases.
 
 **Pros**: Works everywhere, no runtime overhead
-**Cons**: Friction for scripting use case, ceremony for small projects
+**Cons**: Friction for development workflows, ceremony for all project sizes
 
-**Decision**: Keep build tool for production, add plugin for development/scripting.
+**Decision**: The `thinkwell` CLI becomes the primary runtime for development. The build tool remains available for production optimization via `thinkwell build` (see Future Work).
 
 ### 4. TypeScript Language Service Plugin
 
@@ -542,9 +562,29 @@ This approach ensures users immediately see problems with clear context rather t
 
 The `thinkwell` CLI could grow to include:
 
-- **`thinkwell build`** - Bundle for production with pre-generated schemas, eliminating runtime startup latency
+- **`thinkwell build`** - Bundle for production with pre-generated schemas, eliminating runtime startup latency. This is the production optimization path—`thinkwell` remains the primary development runtime regardless of project size.
 - **`thinkwell init`** - Scaffold a new thinkwell project
 - **`thinkwell check`** - Validate types and schemas without running
+
+### TypeScript Language Service Plugin
+
+A TypeScript language service plugin (`@thinkwell/ts-plugin`) could provide IDE support for `thinkwell:*` imports without requiring npm packages or running `thinkwell types`:
+
+```json
+// tsconfig.json
+{
+  "compilerOptions": {
+    "plugins": [{ "name": "@thinkwell/ts-plugin" }]
+  }
+}
+```
+
+This would:
+- Resolve `thinkwell:*` imports to their type definitions
+- Provide autocomplete for `Type.Schema` on `@JSONSchema`-annotated types
+- Eliminate the need for generated `.d.ts` files in most workflows
+
+This is a natural evolution of the current `thinkwell types` approach for projects that want tighter IDE integration.
 
 ### Node.js Runtime Support
 
