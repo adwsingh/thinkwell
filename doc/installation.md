@@ -23,21 +23,31 @@ brew install dherman/thinkwell/thinkwell
 
 This installs a self-contained binary with everything included—no additional dependencies required.
 
-### Manual Installation (Linux)
+### Manual Installation (macOS/Linux)
 
 Download and install the binary directly:
 
-**x64 Linux:**
+**macOS Apple Silicon:**
+```bash
+mkdir -p ~/.local/bin && curl -L https://github.com/dherman/thinkwell/releases/latest/download/thinkwell-darwin-arm64.tar.gz | tar -xz -C ~/.local/bin && mv ~/.local/bin/thinkwell* ~/.local/bin/thinkwell
+```
+
+**macOS Intel:**
+```bash
+mkdir -p ~/.local/bin && curl -L https://github.com/dherman/thinkwell/releases/latest/download/thinkwell-darwin-x64.tar.gz | tar -xz -C ~/.local/bin && mv ~/.local/bin/thinkwell* ~/.local/bin/thinkwell
+```
+
+**Linux x64:**
 ```bash
 mkdir -p ~/.local/bin && curl -L https://github.com/dherman/thinkwell/releases/latest/download/thinkwell-linux-x64.tar.gz | tar -xz -C ~/.local/bin && mv ~/.local/bin/thinkwell* ~/.local/bin/thinkwell
 ```
 
-**ARM Linux:**
+**Linux ARM64:**
 ```bash
 mkdir -p ~/.local/bin && curl -L https://github.com/dherman/thinkwell/releases/latest/download/thinkwell-linux-arm64.tar.gz | tar -xz -C ~/.local/bin && mv ~/.local/bin/thinkwell* ~/.local/bin/thinkwell
 ```
 
-Then add `~/.local/bin` to your PATH.
+Then add `~/.local/bin` to your PATH if not already present.
 
 ### Project Installation
 
@@ -65,7 +75,7 @@ bun add -D thinkwell
 ```
 <!-- tabs:end -->
 
-> **Note:** When installed via npm/pnpm/yarn, thinkwell requires [Bun](https://bun.sh) to run scripts. See [Runtime Requirements](#runtime-requirements) below.
+> **Note:** When installed via npm/pnpm/yarn/bun, thinkwell requires Node.js 24+. See [Runtime Requirements](#runtime-requirements) below.
 
 ### Global npm Installation
 
@@ -79,44 +89,46 @@ Thinkwell uses a two-tier distribution model:
 
 | Installation Method | Runtime Required | Notes |
 |---------------------|------------------|-------|
-| **Homebrew** | None | Self-contained binary with embedded runtime |
-| **npm/pnpm/yarn/bun** | Bun | Lightweight package, requires external Bun |
+| **Homebrew / Binary** | None | Self-contained binary with embedded Node.js runtime |
+| **npm/pnpm/yarn/bun** | Node.js 24+ | Lightweight package, requires Node.js 24 or later |
 
-### Why Bun?
+### Why Node.js 24?
 
-Thinkwell uses Bun as its runtime to provide:
+Thinkwell uses Node.js 24 with experimental TypeScript support to provide:
 
 - **Native TypeScript execution** — No transpilation step, just write and run
 - **Automatic schema generation** — `@JSONSchema` types become runtime validators
-- **Fast startup** — Scripts start instantly
-- **Compiled executables** — Build standalone binaries from your agents
+- **Standard Node.js runtime** — Uses the stable, well-tested Node.js ecosystem
+- **External package resolution** — User scripts can import from their own `node_modules`
 
-### Installing Bun
+### Installing Node.js 24
 
-If you installed thinkwell via npm and need Bun:
+If you installed thinkwell via npm and need Node.js 24:
 
 ```bash
-# macOS/Linux
-curl -fsSL https://bun.sh/install | bash
+# Using nvm (recommended)
+nvm install 24
+nvm use 24
 
-# Or via Homebrew
-brew install oven-sh/bun/bun
+# Using Homebrew
+brew install node@24
 
-# Windows
-powershell -c "irm bun.sh/install.ps1 | iex"
+# Using fnm
+fnm install 24
+fnm use 24
 ```
 
-### Commands That Work Without Bun
+### Commands and Node.js Requirements
 
-Even without Bun installed, these commands work with the npm distribution:
+All thinkwell commands require Node.js 24+ when using the npm distribution:
 
-| Command | Bun Required? |
-|---------|---------------|
-| `thinkwell --help` | No |
-| `thinkwell --version` | No |
-| `thinkwell init` | No |
-| `thinkwell run <script>` | **Yes** |
-| `thinkwell types` | **Yes** |
+| Command | Description |
+|---------|-------------|
+| `thinkwell --help` | Show help |
+| `thinkwell --version` | Show version |
+| `thinkwell init` | Initialize a new project |
+| `thinkwell run <script>` | Run a TypeScript script |
+| `thinkwell types` | Generate type declarations |
 
 ## CI/CD Installation
 
@@ -141,14 +153,16 @@ Available binaries:
 - `thinkwell-linux-arm64.tar.gz` — Linux ARM64
 - `thinkwell-linux-x64.tar.gz` — Linux x64
 
-### Option 2: npm + Bun Setup
+### Option 2: npm + Node.js 24 Setup
 
-Smaller download, but requires Bun setup:
+Smaller download, but requires Node.js 24:
 
 ```yaml
 # GitHub Actions
-- name: Setup Bun
-  uses: oven-sh/setup-bun@v1
+- name: Setup Node.js 24
+  uses: actions/setup-node@v4
+  with:
+    node-version: '24'
 
 - name: Install thinkwell
   run: npm install -g thinkwell
@@ -176,12 +190,12 @@ CMD ["thinkwell", "run", "src/agent.ts"]
 
 ## Troubleshooting
 
-### "Bun is required to run thinkwell scripts"
+### "Node.js 24 or later is required"
 
-This error appears when using the npm distribution without Bun installed. Solutions:
+This error appears when using the npm distribution with an older Node.js version. Solutions:
 
-1. **Install Bun:** `curl -fsSL https://bun.sh/install | bash`
-2. **Use Homebrew instead:** `brew install dherman/thinkwell/thinkwell` (includes everything)
+1. **Upgrade Node.js:** Use nvm, fnm, or Homebrew to install Node.js 24+
+2. **Use Homebrew binary instead:** `brew install dherman/thinkwell/thinkwell` (includes everything)
 
 ### "command not found: thinkwell"
 
@@ -241,7 +255,47 @@ The `@JSONSchema` decorator requires the thinkwell runtime. Ensure you're runnin
 thinkwell run script.ts
 ```
 
-Not with `bun run` or `node` directly.
+Not with `node` directly.
+
+## Script Limitations
+
+### Top-Level Await Not Supported
+
+Thinkwell uses Node.js's `require(esm)` feature to load user scripts, which does not support top-level `await`. If your script uses top-level await:
+
+```typescript
+// ❌ This will NOT work
+const data = await fetchData();
+```
+
+Wrap your code in an async function:
+
+```typescript
+// ✅ This works
+async function main() {
+  const data = await fetchData();
+}
+main();
+```
+
+This affects less than 0.02% of npm packages. If you have dependencies that use top-level await, pre-bundle your script with esbuild.
+
+### TypeScript Features
+
+Thinkwell uses Node.js 24's `--experimental-transform-types` flag for full TypeScript support. All standard TypeScript features are supported:
+
+**Fully Supported:**
+- Type annotations, interfaces, type aliases
+- Generic functions and classes
+- Type-only imports (`import type {...}`, inline `type` specifier)
+- Type assertions (`as` keyword)
+- Enums (regular and const)
+- Namespaces (used by @JSONSchema)
+- Parameter properties (`constructor(public x: number)`)
+
+**Not Supported:**
+- JSX in `.ts` files (use `.tsx` extension)
+- Legacy decorators (use standard decorators instead)
 
 ## Version Management
 

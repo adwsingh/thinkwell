@@ -1,0 +1,8 @@
+{
+  "name": "user-project",
+  "version": "1.0.0",
+  "description": "Simulated user project that uses both bundled and external modules",
+  "dependencies": {
+    "sentiment": "^5.0.2"
+  }
+}

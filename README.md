@@ -11,7 +11,7 @@ A TypeScript library for easy scripting of AI agents. Thinkwell provides a fluen
 brew install dherman/thinkwell/thinkwell
 ```
 
-**npm** (requires [Bun](https://bun.sh) runtime):
+**npm** (requires Node.js 24+):
 ```bash
 npm install -D thinkwell
 ```

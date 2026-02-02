@@ -1,0 +1,31 @@
+{
+  "name": "pkg-esm-test",
+  "version": "1.0.0",
+  "description": "Test ESM support options for pkg migration",
+  "main": "src/cli-cjs.js",
+  "bin": {
+    "esm-test-cjs": "src/cli-cjs.js",
+    "esm-test-require-esm": "src/cli-require-esm.js"
+  },
+  "scripts": {
+    "build:cjs": "pkg src/cli-cjs.js --targets node24-macos-arm64 --output dist/esm-test-cjs",
+    "build:require-esm": "pkg src/cli-require-esm.js --targets node24-macos-arm64 --output dist/esm-test-require-esm",
+    "build:all": "npm run build:cjs && npm run build:require-esm",
+    "test:dev:cjs": "node src/cli-cjs.js user-project/script.mjs",
+    "test:dev:require-esm": "node src/cli-require-esm.js user-project/script.mjs",
+    "test:pkg:cjs": "./dist/esm-test-cjs user-project/script.mjs",
+    "test:pkg:require-esm": "./dist/esm-test-require-esm user-project/script.mjs"
+  },
+  "pkg": {
+    "assets": [],
+    "scripts": []
+  },
+  "dependencies": {
+    "chalk": "^5.4.1",
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.0.0",
+    "esbuild": "^0.24.0"
+  }
+}

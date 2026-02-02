@@ -1,26 +1,42 @@
-#!/usr/bin/env bun
+#!/usr/bin/env tsx
 /**
- * Build script for creating self-contained thinkwell CLI executables.
+ * Build script for creating self-contained thinkwell CLI executables using pkg.
  *
- * Uses `bun build --compile` to create native binaries for different platforms.
- * The resulting binaries include the Bun runtime and can run without any
- * external dependencies (except Bun for running user scripts).
+ * Uses `@yao-pkg/pkg` to create native binaries for different platforms.
+ * The resulting binaries include Node.js 24 with --experimental-transform-types
+ * enabled, allowing execution of TypeScript user scripts including namespace
+ * declarations (required for @JSONSchema support).
+ *
+ * Unlike the Bun-based build, pkg binaries can properly resolve external
+ * npm packages from the user's node_modules at runtime.
  */
 
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { execSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
-const ROOT_DIR = resolve(dirname(import.meta.path), "..");
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const ROOT_DIR = resolve(__dirname, "..");
 const DIST_DIR = resolve(ROOT_DIR, "dist-bin");
-const CLI_ENTRY = resolve(ROOT_DIR, "src/cli/main.ts");
+// Use the CommonJS entry point directly (not compiled from TypeScript)
+// pkg works best with CommonJS, so we use a .cjs file
+const CLI_ENTRY = resolve(ROOT_DIR, "src/cli/main-pkg.cjs");
 
-// Supported build targets
+// Supported build targets (pkg uses different naming than Bun)
 type Target = "darwin-arm64" | "darwin-x64" | "linux-x64" | "linux-arm64";
+
+// Map our target names to pkg target names
+const TARGET_MAP: Record<Target, string> = {
+  "darwin-arm64": "node24-macos-arm64",
+  "darwin-x64": "node24-macos-x64",
+  "linux-x64": "node24-linux-x64",
+  "linux-arm64": "node24-linux-arm64",
+};
 
 // Default targets for local builds (macOS only)
 // CI builds specify targets explicitly for cross-platform support
-const TARGETS: Target[] = ["darwin-arm64", "darwin-x64"];
+const DEFAULT_TARGETS: Target[] = ["darwin-arm64", "darwin-x64"];
 
 interface BuildOptions {
   targets?: Target[];
@@ -43,17 +59,23 @@ function ensureDistDir(): void {
 function buildTarget(target: Target, version: string, verbose: boolean): void {
   const outputName = `thinkwell-${target}`;
   const outputPath = resolve(DIST_DIR, outputName);
+  const pkgTarget = TARGET_MAP[target];
 
   console.log(`Building ${outputName}...`);
 
-  // Build command
+  // Build command using pkg
+  // --options experimental-transform-types enables full TypeScript support including
+  // namespace declarations (required for @JSONSchema-generated code)
+  // --options disable-warning=ExperimentalWarning suppresses the noisy warning
+  // --public includes source files instead of bytecode (required for ESM modules)
   const cmd = [
-    "bun",
-    "build",
-    "--compile",
-    `--target=bun-${target}`,
-    `--outfile=${outputPath}`,
+    "npx",
+    "pkg",
     CLI_ENTRY,
+    `--targets=${pkgTarget}`,
+    "--options=experimental-transform-types,disable-warning=ExperimentalWarning",
+    "--public",
+    `--output=${outputPath}`,
   ];
 
   if (verbose) {
@@ -87,10 +109,10 @@ async function main(): Promise<void> {
 
   if (helpRequested) {
     console.log(`
-build-binary.ts - Build self-contained thinkwell CLI executables
+build-binary-pkg.ts - Build self-contained thinkwell CLI executables using pkg
 
 Usage:
-  bun scripts/build-binary.ts [options] [targets...]
+  tsx scripts/build-binary-pkg.ts [options] [targets...]
 
 Options:
   --verbose, -v    Show detailed build output
@@ -103,9 +125,12 @@ Targets:
   linux-arm64      Linux on ARM64
 
 Examples:
-  bun scripts/build-binary.ts                    Build for darwin-arm64 and darwin-x64
-  bun scripts/build-binary.ts darwin-arm64       Build only for Apple Silicon
-  bun scripts/build-binary.ts --verbose          Build with detailed output
+  tsx scripts/build-binary-pkg.ts                    Build for darwin-arm64 and darwin-x64
+  tsx scripts/build-binary-pkg.ts darwin-arm64       Build only for Apple Silicon
+  tsx scripts/build-binary-pkg.ts --verbose          Build with detailed output
+
+Note: This script requires the TypeScript build to be run first (pnpm build).
+      The pkg binary uses Node 24 with --experimental-transform-types for native TS.
 `);
     process.exit(0);
   }
@@ -114,10 +139,10 @@ Examples:
   const targetArgs = args.filter(
     (arg) => !arg.startsWith("-")
   ) as Target[];
-  const targets = targetArgs.length > 0 ? targetArgs : TARGETS;
+  const targets = targetArgs.length > 0 ? targetArgs : DEFAULT_TARGETS;
 
   // Validate targets
-  const validTargets = ["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64"];
+  const validTargets = Object.keys(TARGET_MAP);
   for (const target of targets) {
     if (!validTargets.includes(target)) {
       console.error(`Error: Invalid target '${target}'`);
@@ -127,7 +152,7 @@ Examples:
   }
 
   const version = getVersion();
-  console.log(`Building thinkwell v${version}\n`);
+  console.log(`Building thinkwell v${version} with pkg\n`);
 
   // Ensure the CLI entry point exists
   if (!existsSync(CLI_ENTRY)) {

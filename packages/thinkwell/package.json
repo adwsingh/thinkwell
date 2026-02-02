@@ -11,11 +11,13 @@
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
-      "import": "./dist/index.js"
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
     },
     "./connectors": {
       "types": "./dist/connectors/index.d.ts",
-      "import": "./dist/connectors/index.js"
+      "import": "./dist/connectors/index.js",
+      "default": "./dist/connectors/index.js"
     }
   },
   "engines": {
@@ -23,12 +25,18 @@
   },
   "files": [
     "bin",
-    "dist"
+    "dist",
+    "dist-pkg"
   ],
   "scripts": {
     "build": "tsc",
-    "build:binary": "bun scripts/build-binary.ts",
-    "clean": "rm -rf dist dist-bin",
+    "build:binary": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts",
+    "build:binary:darwin-arm64": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts darwin-arm64",
+    "build:binary:darwin-x64": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts darwin-x64",
+    "build:binary:linux-x64": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts linux-x64",
+    "build:binary:linux-arm64": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts linux-arm64",
+    "bundle:pkg": "tsx scripts/bundle-for-pkg.ts",
+    "clean": "rm -rf dist dist-bin dist-pkg",
     "test": "node --test --import tsx src/**/*.test.ts"
   },
   "keywords": [
@@ -44,11 +52,31 @@
     "@thinkwell/acp": "workspace:*",
     "@thinkwell/bun-plugin": "workspace:*",
     "@thinkwell/conductor": "workspace:*",
-    "@thinkwell/protocol": "workspace:*"
+    "@thinkwell/protocol": "workspace:*",
+    "ts-json-schema-generator": "^2.4.0",
+    "typescript": "^5.7.2"
   },
   "devDependencies": {
     "@types/node": "^24.10.4",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "@yao-pkg/pkg": "^6.12.0",
+    "esbuild": "^0.27.2",
+    "tsx": "^4.19.2"
+  },
+  "pkg": {
+    "assets": [
+      "dist/**/*.js",
+      "dist-pkg/*.cjs"
+    ],
+    "scripts": [
+      "dist/**/*.js",
+      "dist-pkg/*.cjs"
+    ],
+    "targets": [
+      "node24-macos-arm64",
+      "node24-macos-x64",
+      "node24-linux-x64",
+      "node24-linux-arm64"
+    ],
+    "outputPath": "dist-bin"
   }
 }

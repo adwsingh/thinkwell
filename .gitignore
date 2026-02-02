@@ -2,6 +2,7 @@ doc/.local
 node_modules/
 dist/
 dist-bin/
+dist-pkg/
 *.tsbuildinfo
 .DS_Store
 **/*.log
