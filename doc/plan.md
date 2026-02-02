@@ -30,11 +30,11 @@ Based on [RFD: CLI Distribution](rfd/cli-distribution.md)
 
 ## Phase 4: Homebrew Bottles (Self-Contained)
 
-- [ ] Set up GitHub Releases as bottle distribution host
-- [ ] Create release automation to build and upload binaries for all platforms
-- [ ] Update Homebrew formula to use binary distribution (no npm/Node.js dependency)
-- [ ] Remove Bun caveat from formula (binary is fully self-contained)
-- [ ] Test `brew install` downloads bottle and runs without external Bun
+- [x] Set up GitHub Releases as bottle distribution host
+- [x] Create release automation to build and upload binaries for all platforms
+- [x] Update Homebrew formula to use binary distribution (no npm/Node.js dependency)
+- [x] Remove Bun caveat from formula (binary is fully self-contained)
+- [x] Test `brew install` downloads bottle and runs without external Bun
 
 ## Phase 5: Set up Homebrew Account
 

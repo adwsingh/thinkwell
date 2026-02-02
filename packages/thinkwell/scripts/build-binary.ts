@@ -18,6 +18,8 @@ const CLI_ENTRY = resolve(ROOT_DIR, "src/cli/main.ts");
 // Supported build targets
 type Target = "darwin-arm64" | "darwin-x64" | "linux-x64" | "linux-arm64";
 
+// Default targets for local builds (macOS only)
+// CI builds specify targets explicitly for cross-platform support
 const TARGETS: Target[] = ["darwin-arm64", "darwin-x64"];
 
 interface BuildOptions {

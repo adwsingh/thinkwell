@@ -1,25 +1,36 @@
 class Thinkwell < Formula
   desc "AI agent orchestration framework"
   homepage "https://github.com/dherman/thinkwell"
-  url "https://registry.npmjs.org/thinkwell/-/thinkwell-0.3.0-alpha.1.tgz"
-  sha256 "e7dd03bdfcae32095e774bfa62074944a9313268dc7649e3391b5fd174fa5b85"
+  version "0.3.0-alpha.1"
   license "MIT"
 
-  depends_on "node"
-
-  def install
-    system "npm", "install", *std_npm_args
-    bin.install_symlink Dir["#{libexec}/bin/*"]
+  on_macos do
+    on_arm do
+      url "https://github.com/dherman/thinkwell/releases/download/v0.3.0-alpha.1/thinkwell-darwin-arm64.tar.gz"
+      sha256 "PLACEHOLDER_DARWIN_ARM64"
+    end
+    on_intel do
+      url "https://github.com/dherman/thinkwell/releases/download/v0.3.0-alpha.1/thinkwell-darwin-x64.tar.gz"
+      sha256 "PLACEHOLDER_DARWIN_X64"
+    end
   end
 
-  def caveats
-    <<~EOS
-      thinkwell requires Bun to run scripts. Install Bun with:
+  on_linux do
+    on_arm do
+      url "https://github.com/dherman/thinkwell/releases/download/v0.3.0-alpha.1/thinkwell-linux-arm64.tar.gz"
+      sha256 "PLACEHOLDER_LINUX_ARM64"
+    end
+    on_intel do
+      url "https://github.com/dherman/thinkwell/releases/download/v0.3.0-alpha.1/thinkwell-linux-x64.tar.gz"
+      sha256 "PLACEHOLDER_LINUX_X64"
+    end
+  end
 
-        brew install oven-sh/bun/bun
-
-      Or visit https://bun.sh for other installation options.
-    EOS
+  def install
+    # The tarball contains a single binary named thinkwell-<platform>
+    # Find and install it as 'thinkwell'
+    binary = Dir["thinkwell-*"].first
+    bin.install binary => "thinkwell"
   end
 
   test do

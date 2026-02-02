@@ -15,28 +15,34 @@ Or install directly:
 brew install dherman/thinkwell/thinkwell
 ```
 
-## Requirements
+## Self-Contained Binary
 
-The formula depends on Node.js (installed automatically by Homebrew).
-
-To run thinkwell scripts, you'll also need [Bun](https://bun.sh):
-
-```bash
-brew install oven-sh/bun/bun
-```
+The Homebrew formula installs a self-contained binary that includes the Bun runtime. No additional dependencies (Node.js, Bun, etc.) are required.
 
 ## Updating the Formula
 
-When publishing a new version to npm:
+When creating a new release:
 
-1. Get the SHA256 of the new tarball:
+1. Tag the release:
    ```bash
-   curl -s "https://registry.npmjs.org/thinkwell/-/thinkwell-X.X.X.tgz" | shasum -a 256
+   git tag v0.3.0
+   git push origin v0.3.0
    ```
 
-2. Update `Formula/thinkwell.rb` with the new version and SHA256
+2. Wait for the GitHub Actions workflow to build and upload binaries
 
-3. Test locally:
+3. Update the formula with the new checksums:
+   ```bash
+   ./homebrew/update-formula.sh 0.3.0
+   ```
+
+4. Test locally:
    ```bash
    brew install --build-from-source ./homebrew/Formula/thinkwell.rb
    ```
+
+5. Commit and push the updated formula
+
+## Manual Formula Update
+
+If you need to update manually, download the SHA256SUMS.txt from the GitHub release and update the sha256 values in `Formula/thinkwell.rb`.
