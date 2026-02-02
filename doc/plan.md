@@ -15,18 +15,31 @@ Based on [RFD: CLI Distribution](rfd/cli-distribution.md)
 
 ## Phase 2: Homebrew Distribution
 
-- [ ] Create `homebrew-thinkwell` repository
-- [ ] Write npm-based Homebrew formula with Bun caveat
-- [ ] Build and test self-contained binary executables
-- [ ] Test installation via `brew tap` and `brew install`
+- [x] Create `homebrew/` directory in monorepo with Formula structure
+- [x] Write npm-based Homebrew formula with Bun caveat
+- [x] Test installation via `brew install dherman/thinkwell/thinkwell`
 
-## Phase 3: Stable Release
+## Phase 3: Binary Build of Thinkwell CLI
+
+- [ ] Create build script using `bun build --compile` for self-contained executables
+- [ ] Build binaries for darwin-arm64 and darwin-x64
+- [ ] Test binaries work without Node.js installed
+- [ ] Verify Bun runtime detection still works in compiled binary
+
+## Phase 4: Homebrew Bottles
+
+- [ ] Set up GitHub Releases as bottle distribution host
+- [ ] Create release automation to build and upload binaries
+- [ ] Update Homebrew formula with bottle block pointing to GitHub Releases
+- [ ] Test `brew install` downloads bottle instead of building from source
+
+## Phase 5: Stable Release
 
 - [ ] Iterate with additional pre-release versions as needed
 - [ ] Publish stable `0.3.0` to npm under `latest` tag
 - [ ] Update Homebrew formula to point to stable release
 
-## Phase 4: Documentation
+## Phase 6: Documentation
 
 - [ ] Write installation guide with tabbed package manager examples
 - [ ] Frame Bun requirement as feature (TypeScript-native, schema generation, compiled executables)
