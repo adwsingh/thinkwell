@@ -149,6 +149,20 @@ export const thinkwellPlugin: BunPlugin = {
       };
     });
 
+    // Handle plain thinkwell package imports (after rewriting from thinkwell:*)
+    // This is needed because rewriteThinkwellImports converts thinkwell:agent -> thinkwell
+    // in the source, which then needs to be resolved to the virtual module.
+    build.onResolve({ filter: /^(thinkwell|@thinkwell\/(acp|protocol))$/ }, (args) => {
+      if (isVirtualModeEnabled() && getRegisteredModule(args.path)) {
+        return {
+          path: args.path,
+          namespace: "thinkwell-virtual",
+        };
+      }
+      // Fall back to normal resolution (npm distribution)
+      return undefined;
+    });
+
     // Handle virtual module loads (for compiled binary distribution)
     build.onLoad(
       { filter: /.*/, namespace: "thinkwell-virtual" },
