@@ -11,6 +11,20 @@
 import { Agent } from "thinkwell:agent";
 import { CLAUDE_CODE } from "thinkwell:connectors";
 
+function startSpinner(message: string): () => void {
+  const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+  let i = 0;
+  const interval = setInterval(() => {
+    // ANSI escape codes for gray text
+    process.stdout.write(`\r\x1b[90m${frames[i++ % frames.length]} ${message}\x1b[0m`);
+  }, 80);
+
+  return () => {
+    clearInterval(interval);
+    process.stdout.write('\r\x1b[K');
+  };
+}
+
 /**
  * A friendly greeting.
  * @JSONSchema
@@ -24,6 +38,8 @@ async function main() {
   const agent = await Agent.connect(process.env.THINKWELL_AGENT_CMD ?? CLAUDE_CODE);
 
   try {
+    const stopSpinner = startSpinner('Thinking...');
+
     const greeting = await agent
       .think(Greeting.Schema)
       .text(`
@@ -46,7 +62,9 @@ async function main() {
 
       .run();
 
-    console.log(`${greeting.message}`);
+    stopSpinner();
+    // ANSI bold white
+    console.log(`\x1b[1;97m✨ ${greeting.message}\x1b[0m`);
   } finally {
     agent.close();
   }
