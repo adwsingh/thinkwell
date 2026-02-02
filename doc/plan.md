@@ -55,9 +55,9 @@ Based on [RFD: CLI Distribution](rfd/cli-distribution.md)
 
 ## Phase 8: Documentation
 
-- [ ] Write installation guide with tabbed package manager examples
-- [ ] Document two-tier distribution: npm (requires Bun) vs binary (self-contained)
-- [ ] For npm users: frame Bun requirement as feature (TypeScript-native, schema generation)
-- [ ] For Homebrew users: emphasize zero-dependency installation experience
-- [ ] Add troubleshooting section for common issues
-- [ ] Document CI/CD installation patterns (both npm+Bun and direct binary approaches)
+- [x] Write installation guide with tabbed package manager examples
+- [x] Document two-tier distribution: npm (requires Bun) vs binary (self-contained)
+- [x] For npm users: frame Bun requirement as feature (TypeScript-native, schema generation)
+- [x] For Homebrew users: emphasize zero-dependency installation experience
+- [x] Add troubleshooting section for common issues
+- [x] Document CI/CD installation patterns (both npm+Bun and direct binary approaches)
