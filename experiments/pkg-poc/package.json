@@ -1,0 +1,27 @@
+{
+  "name": "pkg-poc",
+  "version": "1.0.0",
+  "description": "Proof-of-concept for pkg with bundled + external module resolution",
+  "main": "src/cli.js",
+  "bin": {
+    "pkg-poc": "src/cli.js",
+    "pkg-poc-native-ts": "src/cli-native-ts.js"
+  },
+  "scripts": {
+    "build": "pkg . --targets node24-macos-arm64 --output dist/pkg-poc",
+    "build:native-ts": "pkg src/cli-native-ts.js --targets node24-macos-arm64 --options experimental-strip-types --output dist/pkg-poc-native-ts",
+    "build:debug": "pkg . --targets node24-macos-arm64 --output dist/pkg-poc --debug",
+    "test:dev": "node src/cli.js ../user-project/script.js",
+    "test:pkg": "./dist/pkg-poc ../user-project/script.js"
+  },
+  "pkg": {
+    "assets": [],
+    "scripts": []
+  },
+  "dependencies": {
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "@yao-pkg/pkg": "^6.0.0"
+  }
+}
