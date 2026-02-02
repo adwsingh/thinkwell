@@ -83,13 +83,17 @@ pkg uses a `/snapshot/` virtual filesystem prefix and patches Node's `require` t
 
 ### Native TypeScript Support
 
-Node.js 24+ supports native TypeScript execution via `--experimental-strip-types`. This flag can be baked into the pkg binary:
+Node.js 24+ supports native TypeScript execution. We use `--experimental-transform-types` (not `--experimental-strip-types`) because @JSONSchema processing generates TypeScript namespace declarations, which require transformation rather than just stripping.
 
 ```bash
-pkg src/cli.js --targets node24-macos-arm64 --options experimental-strip-types -o thinkwell
+pkg src/cli/main-pkg.cjs --targets node24-macos-arm64 --options experimental-transform-types -o thinkwell
 ```
 
-The compiled binary can then directly `require('./user-script.ts')` without any transpiler. This eliminates the need for sucrase, esbuild, or any bundled transpilation library.
+The compiled binary can then directly `require('./user-script.ts')` without any external transpiler. Using `--experimental-transform-types` enables full TypeScript support including:
+- Namespaces (required for @JSONSchema-generated code)
+- Enums (regular and const)
+- Parameter properties
+- Legacy decorators
 
 **Tested and working:**
 ```
@@ -103,6 +107,20 @@ Input: "TypeScript is absolutely fantastic!"
   Positive: fantastic
 === TypeScript Script Completed ===
 ```
+
+### ESM Bundling Workaround
+
+pkg doesn't properly resolve ESM imports inside its `/snapshot/` virtual filesystem. To work around this, thinkwell packages are pre-bundled into CJS format using esbuild before pkg compilation:
+
+```
+scripts/bundle-for-pkg.ts → dist-pkg/
+  ├── thinkwell.cjs      (~711 KB) - bundled thinkwell package
+  ├── acp.cjs            (~242 KB) - bundled @thinkwell/acp package
+  ├── protocol.cjs       (~7 KB)   - bundled @thinkwell/protocol package
+  └── cli-loader.cjs     (~11 MB)  - loader + ts-json-schema-generator + typescript
+```
+
+The CLI loader is bundled separately because it includes the full TypeScript compiler and ts-json-schema-generator for @JSONSchema processing at runtime.
 
 ## Proposal
 
@@ -175,30 +193,48 @@ This transformation happens in the loader before the script is executed, similar
 
 ### Build Configuration
 
+The build process has two stages:
+
+1. **Pre-bundle** (`scripts/bundle-for-pkg.ts`): Bundle thinkwell packages and CLI loader into CJS format
+2. **pkg compile** (`scripts/build-binary-pkg.ts`): Compile the CJS entry point into platform binaries
+
 **package.json scripts:**
 ```json
 {
   "scripts": {
-    "build:binary": "npm run build:binary:darwin-arm64 && npm run build:binary:darwin-x64 && npm run build:binary:linux-x64 && npm run build:binary:linux-arm64",
-    "build:binary:darwin-arm64": "pkg dist/cli/main.js --targets node24-macos-arm64 --options experimental-strip-types -o dist-bin/thinkwell-darwin-arm64",
-    "build:binary:darwin-x64": "pkg dist/cli/main.js --targets node24-macos-x64 --options experimental-strip-types -o dist-bin/thinkwell-darwin-x64",
-    "build:binary:linux-x64": "pkg dist/cli/main.js --targets node24-linux-x64 --options experimental-strip-types -o dist-bin/thinkwell-linux-x64",
-    "build:binary:linux-arm64": "pkg dist/cli/main.js --targets node24-linux-arm64 --options experimental-strip-types -o dist-bin/thinkwell-linux-arm64"
+    "bundle:pkg": "tsx scripts/bundle-for-pkg.ts",
+    "build:binary:pkg": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts",
+    "build:binary:pkg:darwin-arm64": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts darwin-arm64",
+    "build:binary:pkg:darwin-x64": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts darwin-x64",
+    "build:binary:pkg:linux-x64": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts linux-x64",
+    "build:binary:pkg:linux-arm64": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts linux-arm64"
+  }
+}
+```
+
+**pkg configuration in package.json:**
+```json
+{
+  "pkg": {
+    "assets": ["dist/**/*.js", "dist-pkg/*.cjs"],
+    "scripts": ["dist/**/*.js", "dist-pkg/*.cjs"],
+    "targets": ["node24-macos-arm64", "node24-macos-x64", "node24-linux-x64", "node24-linux-arm64"],
+    "outputPath": "dist-bin"
   }
 }
 ```
 
 ## Trade-offs
 
-### Advantages of pkg
+### Advantages of pkg (and Node.js)
 
 | Aspect | Benefit |
 |--------|---------|
 | External resolution | User scripts can import from their own node_modules |
 | Transitive dependencies | Packages that import other packages work correctly |
 | Mature ecosystem | pkg has been production-tested for years |
-| Native TypeScript | Node 24's type stripping eliminates transpiler dependency |
-| No subprocess | Single process execution (unlike npm distribution's Bun spawn) |
+| Native TypeScript | Node 24's type transformation eliminates transpiler dependency |
+| Unified architecture | Both npm and binary distributions use identical execution paths |
 
 ### Disadvantages vs Bun
 
@@ -243,9 +279,17 @@ For thinkwell's use case, the performance trade-offs are acceptable:
 
 ### Phase 4: npm Distribution Update
 
-1. Update npm package to detect whether running via pkg binary or npm
-2. Maintain subprocess spawn for npm distribution (spawns `bun` or `node` with appropriate flags)
-3. Ensure identical behavior between distributions
+**Decision:** Remove Bun from npm distribution entirely.
+
+The original plan was to maintain Bun subprocess spawn for the npm distribution. However, Bun has the same fundamental limitation in its subprocess mode: it cannot resolve packages from the user's `node_modules` when running scripts through `bun --preload`.
+
+Both distributions now use the same Node.js-based execution:
+1. Pre-bundled thinkwell packages from `dist-pkg/*.cjs`
+2. CLI loader (`dist-pkg/cli-loader.cjs`) for script execution
+3. Node 24's `--experimental-transform-types` for TypeScript support
+4. Same import transformation and @JSONSchema processing pipeline
+
+The npm distribution's `bin/thinkwell` launcher now validates Node.js 24+ and directly uses the pkg-style loader infrastructure instead of spawning Bun.
 
 ### Phase 5: Testing and Documentation
 
@@ -292,19 +336,22 @@ For thinkwell's use case, the performance trade-offs are acceptable:
 
 **Recommendation:** Add Windows to the test matrix but defer as lower priority.
 
-### @JSONSchema Processing
+### @JSONSchema Processing — RESOLVED
 
 **Question:** How will @JSONSchema type processing work?
 
-**Current approach:** The Bun plugin's `onLoad` hook processes TypeScript files to inject schema namespaces.
+**Answer:** Ported schema generation to a standalone module that runs at script load time.
 
-**Proposed approach:**
-1. Read TypeScript source from disk
-2. Process with ts-json-schema-generator (same as current)
-3. Inject namespace declarations
-4. Execute with vm.runInThisContext() or Module._compile()
+**Implementation** (see `packages/thinkwell/src/cli/schema.ts`):
 
-This should work identically since the schema processing is independent of the runtime.
+1. **Type Discovery**: `findMarkedTypes()` uses TypeScript AST traversal to find types with `@JSONSchema` JSDoc tag
+2. **Schema Generation**: `generateSchemas()` uses ts-json-schema-generator to create JSON schemas with inlined `$ref` references
+3. **Code Injection**: `generateInsertions()` creates namespace declarations with `SchemaProvider` implementations
+4. **Transform Pipeline**: `transformJsonSchemas()` orchestrates the full transformation
+
+The schema module is pre-bundled into `dist-pkg/cli-loader.cjs` along with ts-json-schema-generator and typescript (~11MB total). This enables @JSONSchema processing in both the pkg binary and npm distributions.
+
+**Key insight:** Using `--experimental-transform-types` instead of `--experimental-strip-types` was necessary because the injected namespace declarations are TypeScript syntax that must be transformed, not just stripped.
 
 ## Comparison with Alternatives
 
