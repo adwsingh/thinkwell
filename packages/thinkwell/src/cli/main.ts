@@ -34,7 +34,7 @@ registerModule("@thinkwell/protocol", thinkwellProtocol as Record<string, unknow
 import { runInit } from "./init-command.js";
 
 // Version must be updated manually to match package.json
-const VERSION = "0.4.0-alpha.1";
+const VERSION = "0.4.0";
 
 function showHelp(): void {
   console.log(`
