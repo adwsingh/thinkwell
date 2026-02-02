@@ -164,11 +164,40 @@ the type. Tests updated to use the correct API.
 
 ## Phase 8: Documentation & Cleanup
 
-- [ ] Update installation documentation with pkg binary instructions
-- [ ] Document top-level await limitation for ESM scripts
-- [ ] Document unsupported TypeScript features
-- [ ] Remove or deprecate Bun-specific binary build scripts
-- [ ] Update cli-distribution.md RFD with new architecture
+- [x] Update installation documentation with pkg binary instructions
+- [x] Document top-level await limitation for ESM scripts
+- [x] Document unsupported TypeScript features
+- [x] Remove or deprecate Bun-specific binary build scripts
+- [x] Update cli-distribution.md RFD with new architecture
+
+### Implementation Notes (Phase 8)
+
+**Documentation updates**:
+- Updated `doc/installation.md` with Node.js 24 requirements (replacing Bun)
+- Added macOS binary download instructions alongside Linux
+- Added "Script Limitations" section documenting top-level await and TypeScript features
+- Updated CI/CD examples to use Node.js 24 instead of Bun
+- Updated troubleshooting section for new error messages
+
+**README.md update**: Changed npm installation note from "requires Bun" to "requires Node.js 24+".
+
+**Build script cleanup**:
+- Removed `packages/thinkwell/scripts/build-binary.ts` (Bun-specific)
+- Renamed pkg scripts from `build:binary:pkg:*` to `build:binary:*`
+- Main `build:binary` script now uses pkg instead of Bun
+
+**RFD update**: Rewrote `doc/rfd/cli-distribution.md` with new architecture:
+- Documented unified execution path for npm and binary distributions
+- Described module resolution, virtual module registry, and import transformation
+- Added build process documentation (pre-bundling + pkg compilation)
+- Updated package structure and configuration examples
+- Added historical context referencing the pkg-migration RFD
+
+**RFD archive**: Created `doc/rfd/archive/` for obsolete RFDs:
+- Moved `bun-schema-plugin.md` → `archive/bun-schema-plugin.md`
+- Moved `binary-module-resolution.md` → `archive/binary-module-resolution.md`
+- Restored original `cli-distribution.md` from git → `archive/cli-distribution-bun.md`
+- Added superseded notices to each archived RFD linking to current docs
 
 ## Notes
 

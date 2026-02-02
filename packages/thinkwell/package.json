@@ -30,12 +30,11 @@
   ],
   "scripts": {
     "build": "tsc",
-    "build:binary": "bun scripts/build-binary.ts",
-    "build:binary:pkg": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts",
-    "build:binary:pkg:darwin-arm64": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts darwin-arm64",
-    "build:binary:pkg:darwin-x64": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts darwin-x64",
-    "build:binary:pkg:linux-x64": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts linux-x64",
-    "build:binary:pkg:linux-arm64": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts linux-arm64",
+    "build:binary": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts",
+    "build:binary:darwin-arm64": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts darwin-arm64",
+    "build:binary:darwin-x64": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts darwin-x64",
+    "build:binary:linux-x64": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts linux-x64",
+    "build:binary:linux-arm64": "tsx scripts/bundle-for-pkg.ts && tsx scripts/build-binary-pkg.ts linux-arm64",
     "bundle:pkg": "tsx scripts/bundle-for-pkg.ts",
     "clean": "rm -rf dist dist-bin dist-pkg",
     "test": "node --test --import tsx src/**/*.test.ts"
