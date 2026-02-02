@@ -10,7 +10,11 @@ This runbook describes how to publish a stable release of thinkwell to npm and H
 
 ## 1. Version Bump
 
-Update the version in all `packages/*/package.json` files to the new version (e.g., remove `-alpha.N` suffix). All packages must have matching versions.
+Update the version in:
+- All `packages/*/package.json` files
+- The `VERSION` constant in `packages/thinkwell/src/cli/main.ts`
+
+All versions must match.
 
 Commit the version bump:
 
@@ -81,7 +85,7 @@ brew install dherman/thinkwell/thinkwell
 
 For pre-release versions (alpha, beta, rc):
 
-1. Set version in all `packages/*/package.json` files to `0.3.0-alpha.2` (or similar)
+1. Set version in all `packages/*/package.json` files and `VERSION` constant in `packages/thinkwell/src/cli/main.ts` to `0.3.0-alpha.2` (or similar)
 2. Tag as `v0.3.0-alpha.2`
 3. Publish to npm with next tag: `pnpm -r publish --tag next --access public --no-git-checks`
 4. Update Homebrew formula (optional for pre-releases)
