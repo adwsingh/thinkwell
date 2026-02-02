@@ -9,17 +9,64 @@ permissions:
   contents: write
 
 jobs:
-  build-binaries:
+  build-darwin:
+    name: Build darwin (arm64 + x64)
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'pnpm'
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build TypeScript
+        run: pnpm build
+
+      - name: Build darwin-arm64 binary
+        run: pnpm --filter thinkwell build:binary darwin-arm64
+
+      - name: Build darwin-x64 binary
+        run: pnpm --filter thinkwell build:binary darwin-x64
+
+      - name: Create tarballs
+        run: |
+          cd packages/thinkwell/dist-bin
+          tar -czf thinkwell-darwin-arm64.tar.gz thinkwell-darwin-arm64
+          tar -czf thinkwell-darwin-x64.tar.gz thinkwell-darwin-x64
+
+      - name: Upload darwin-arm64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: thinkwell-darwin-arm64
+          path: packages/thinkwell/dist-bin/thinkwell-darwin-arm64.tar.gz
+
+      - name: Upload darwin-x64 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: thinkwell-darwin-x64
+          path: packages/thinkwell/dist-bin/thinkwell-darwin-x64.tar.gz
+
+  build-linux:
     name: Build ${{ matrix.target }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         include:
-          - target: darwin-arm64
-            os: macos-14
-          - target: darwin-x64
-            os: macos-15-large
           - target: linux-x64
             os: ubuntu-latest
           - target: linux-arm64
@@ -65,7 +112,7 @@ jobs:
 
   release:
     name: Create Release
-    needs: build-binaries
+    needs: [build-darwin, build-linux]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
