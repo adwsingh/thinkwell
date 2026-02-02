@@ -256,22 +256,30 @@ For thinkwell's use case, the performance trade-offs are acceptable:
 
 ## Open Questions
 
-### ESM Support
+### ESM Support — RESOLVED
 
 **Question:** Can pkg handle ES modules for user scripts?
 
-**Current understanding:**
-- pkg's ESM support has known issues ([#16](https://github.com/yao-pkg/pkg/issues/16))
-- Dynamic `import()` may fail with `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING`
-- Recommended workaround is pre-bundling with esbuild or using CommonJS
+**Answer:** Yes, via Node.js's stable `require(esm)` feature.
 
-**Options to investigate:**
-1. Use CommonJS `require()` exclusively (our proof-of-concept does this successfully)
-2. Pre-bundle user scripts with esbuild before execution
-3. Use Node.js 22+'s improved ESM support with pkg's `--sea` flag
-4. Wait for pkg's ESM improvements (PR #192)
+**Investigation results** (see [experiments/pkg-esm-test/](../../experiments/pkg-esm-test/)):
 
-**Recommendation:** Start with CommonJS-based loading since it works reliably. Investigate ESM as a follow-up.
+| Approach | Development | pkg Binary |
+|----------|-------------|------------|
+| `await import()` | ✅ | ❌ `ERR_VM_DYNAMIC_IMPORT_CALLBACK_MISSING` |
+| `require(esm)` (no TLA) | ✅ | ✅ Works |
+| `require(esm)` (with TLA) | ❌ | ❌ `ERR_REQUIRE_ASYNC_MODULE` |
+
+**Key findings:**
+
+1. **`require(esm)` is stable** in Node.js 20.19.0+ and 22.12.0+ ([announcement](https://joyeecheung.github.io/blog/2025/12/30/require-esm-in-node-js-from-experiment-to-stability/))
+2. **Works in pkg binaries** — User ESM scripts (`.mjs` or `"type": "module"`) can be loaded via `require()`
+3. **ESM-only packages work** — Tested with `chalk` v5 (pure ESM) importing from user's `node_modules`
+4. **No pre-bundling needed** — Unlike pkg issue workarounds suggest
+
+**Limitation:** Top-level `await` is not supported in user scripts. This affects only ~0.02% of npm packages (6 out of top 5000). Users needing TLA can pre-bundle their scripts with esbuild.
+
+**Decision:** Use `require()` for loading user scripts. This handles both CommonJS and ESM (without TLA) transparently.
 
 ### Windows Support
 

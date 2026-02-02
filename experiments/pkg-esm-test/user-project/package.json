@@ -1,0 +1,9 @@
+{
+  "name": "esm-user-project",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "ESM user project for testing pkg ESM support",
+  "dependencies": {
+    "chalk": "^5.4.1"
+  }
+}
