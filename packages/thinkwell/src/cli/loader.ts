@@ -19,7 +19,7 @@
  * runtime when the user script is executed.
  */
 
-import { readFileSync } from "node:fs";
+import { readFileSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
 import { dirname, join, isAbsolute, resolve } from "node:path";
 import { createRequire } from "node:module";
 import Module from "node:module";
@@ -226,14 +226,14 @@ export function createCustomRequire(
       }
     }
 
-    // Try to resolve from the script's directory
+    // Try to resolve from the script's directory using baseRequire
     try {
-      const resolved = require.resolve(moduleName, {
+      const resolved = baseRequire.resolve(moduleName, {
         paths: [scriptDir, nodeModulesPath],
       });
-      return require(resolved);
+      return baseRequire(resolved);
     } catch {
-      // Fall back to the base require
+      // Fall back to the base require without custom paths
       return baseRequire(moduleName);
     }
   }
@@ -249,7 +249,7 @@ export function createCustomRequire(
     // Try script directory paths first
     const paths = options?.paths ?? [scriptDir, nodeModulesPath];
     try {
-      return require.resolve(id, { paths });
+      return baseRequire.resolve(id, { paths });
     } catch {
       return baseRequire.resolve(id, options);
     }
@@ -258,25 +258,42 @@ export function createCustomRequire(
   // Stub paths property
   customRequire.resolve.paths = baseRequire.resolve.paths;
 
-  customRequire.cache = require.cache;
-  customRequire.extensions = require.extensions;
-  customRequire.main = require.main;
+  customRequire.cache = baseRequire.cache;
+  customRequire.extensions = baseRequire.extensions;
+  customRequire.main = baseRequire.main;
 
   return customRequire as NodeJS.Require;
 }
 
 /**
+ * Check if source code needs thinkwell import transformation.
+ *
+ * @param source - The script source code
+ * @returns true if the source contains thinkwell:* or bundled package imports
+ */
+function needsTransformation(source: string): boolean {
+  // Check for thinkwell:* URI scheme imports
+  if (/from\s+['"]thinkwell:\w+['"]/.test(source)) {
+    return true;
+  }
+  // Check for bundled package imports
+  if (/from\s+['"](?:thinkwell|@thinkwell\/(?:acp|protocol))['"]/.test(source)) {
+    return true;
+  }
+  return false;
+}
+
+/**
  * Load and execute a user script with custom module resolution.
  *
- * This function:
- * 1. Reads the script source from disk
- * 2. Strips any shebang line
- * 3. Rewrites thinkwell:* imports
- * 4. Transforms imports to use bundled modules
- * 5. Compiles and executes with a custom require function
+ * This function handles two loading strategies:
  *
- * For TypeScript files, this relies on Node 24's --experimental-strip-types
- * being baked into the pkg binary.
+ * 1. **Direct require()** - For scripts that don't use thinkwell imports.
+ *    This leverages Node's --experimental-strip-types for TypeScript support.
+ *
+ * 2. **Transform and compile** - For scripts that use thinkwell:* imports
+ *    or import from bundled packages. The script is transformed and written
+ *    to a temp file, then required (which applies type stripping).
  *
  * @param scriptPath - Absolute path to the script to load
  * @returns The module exports from the script
@@ -288,40 +305,57 @@ export function loadScript(scriptPath: string): unknown {
     ? scriptPath
     : resolve(process.cwd(), scriptPath);
 
-  // Read the script source
+  // Read the script source to check if transformation is needed
   const rawSource = readFileSync(absolutePath, "utf-8");
 
-  // Strip shebang if present
+  // Strip shebang for analysis (shebang is stripped by Node's loader anyway)
   const [, sourceWithoutShebang] = extractShebang(rawSource);
 
+  // Check if source needs our transformation
+  if (!needsTransformation(sourceWithoutShebang)) {
+    // No transformation needed - use direct require()
+    // This preserves Node's type stripping for TypeScript files
+    const baseRequire = createRequire(absolutePath);
+    return baseRequire(absolutePath);
+  }
+
+  // Source needs transformation - apply transforms and use a temp file
   // Rewrite thinkwell:* imports to npm package names
   let source = rewriteThinkwellImports(sourceWithoutShebang);
 
-  // Transform imports to use bundled modules
+  // Transform imports to use bundled modules (global.__bundled__)
   source = transformVirtualImports(source);
 
-  // Create a custom require function for this script
-  const customRequire = createCustomRequire(absolutePath);
+  // Write transformed source to a temp file
+  // Use the same extension to ensure Node applies the right loader
+  const ext = absolutePath.endsWith(".ts") ? ".ts" : ".js";
+  const tempDir = join(dirname(absolutePath), ".thinkwell-cache");
+  const tempFile = join(tempDir, `_transformed_${Date.now()}${ext}`);
 
-  // Create a new Module instance
-  // Use the internal constructor interface for access to _nodeModulePaths
-  const ModuleInternal = Module as unknown as ModuleConstructorInternal;
-  const scriptDir = dirname(absolutePath);
-  const mod = new ModuleInternal(absolutePath, module);
-  mod.filename = absolutePath;
-  mod.paths = ModuleInternal._nodeModulePaths(scriptDir);
+  try {
+    // Ensure temp directory exists
+    mkdirSync(tempDir, { recursive: true });
+  } catch {
+    // Directory may already exist
+  }
 
-  // Patch the module's require to use our custom resolution
-  mod.require = customRequire;
+  try {
+    // Write transformed source
+    writeFileSync(tempFile, source, "utf-8");
 
-  // Compile and execute the script
-  // Module._compile handles TypeScript if --experimental-strip-types is enabled
-  mod._compile(source, absolutePath);
+    // Require the transformed file - this uses Node's type stripping
+    const baseRequire = createRequire(absolutePath);
+    const result = baseRequire(tempFile);
 
-  // Mark as loaded
-  mod.loaded = true;
-
-  return mod.exports;
+    return result;
+  } finally {
+    // Clean up temp file
+    try {
+      unlinkSync(tempFile);
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
 }
 
 /**

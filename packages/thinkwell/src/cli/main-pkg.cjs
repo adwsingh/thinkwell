@@ -26,26 +26,25 @@ const VERSION = "0.3.2";
 /**
  * Register bundled thinkwell packages to global.__bundled__.
  *
- * In the pkg binary, these packages are bundled into the /snapshot/ virtual
- * filesystem. We require them here and register them globally so the loader
- * can route user script imports to these bundled versions.
+ * The thinkwell packages are pre-bundled into CJS format by scripts/bundle-for-pkg.ts.
+ * This is necessary because pkg doesn't properly handle ESM imports inside the
+ * /snapshot/ virtual filesystem.
  *
- * Note: require(esm) is stable in Node.js 20.19.0+ and works in pkg binaries.
+ * Pre-bundled files (in dist-pkg/):
+ *   - thinkwell.cjs      - bundled thinkwell package
+ *   - acp.cjs            - bundled @thinkwell/acp package
+ *   - protocol.cjs       - bundled @thinkwell/protocol package
  *
  * IMPORTANT: Use literal strings in require() calls so pkg can statically
- * analyze and bundle these modules. String variables don't work with pkg.
+ * analyze and bundle these modules.
  */
 function registerBundledModules() {
   try {
-    // Require the bundled packages by name. pkg resolves these through
-    // node_modules symlinks which properly traces all ESM dependencies.
-    //
-    // NOTE: A self-referencing symlink (node_modules/thinkwell -> ../..)
-    // must exist for this to work. This is created manually or via pnpm
-    // configuration. Without it, pkg can't resolve the thinkwell package.
-    const thinkwell = require("thinkwell");
-    const acpModule = require("@thinkwell/acp");
-    const protocolModule = require("@thinkwell/protocol");
+    // Require pre-bundled CJS packages using RELATIVE PATHS from src/cli/ directory.
+    // Path: src/cli/ -> ../../dist-pkg/
+    const thinkwell = require("../../dist-pkg/thinkwell.cjs");
+    const acpModule = require("../../dist-pkg/acp.cjs");
+    const protocolModule = require("../../dist-pkg/protocol.cjs");
 
     // Register to global.__bundled__ for the loader to access
     global.__bundled__ = {
@@ -55,16 +54,10 @@ function registerBundledModules() {
     };
   } catch (error) {
     // This error occurs when pkg bundling didn't include all required modules.
-    // For Phase 3, this is a known limitation that will be resolved in Phase 4.
-    console.error("Error: Script execution is not yet available in the pkg binary.");
+    console.error("Error: Failed to load bundled modules.");
     console.error("");
-    console.error("The pkg binary currently supports:");
-    console.error("  - thinkwell init [project-name]");
-    console.error("  - thinkwell --help");
-    console.error("  - thinkwell --version");
-    console.error("");
-    console.error("To run scripts, use the npm distribution:");
-    console.error("  npx thinkwell <script.ts>");
+    console.error("This may indicate a build issue with the pkg binary.");
+    console.error("Please report this at: https://github.com/dherman/thinkwell/issues");
     console.error("");
     if (process.env.DEBUG) {
       console.error("Debug info:");

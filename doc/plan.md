@@ -27,17 +27,45 @@ This plan implements the design in [doc/rfd/pkg-migration.md](rfd/pkg-migration.
 - [x] Support all existing commands: `init`, `types`, `run` (default)
 - [x] Ensure `init` command works (already pure Node.js)
 
-Note: The `init` and `types` (placeholder) commands work in the pkg binary.
-Script execution (`run`) requires resolving pkg's ESM bundling limitations,
-which will be addressed in Phase 4 when testing TypeScript support.
+Note: Script execution now works after Phase 4 resolved pkg's ESM bundling
+limitations by pre-bundling thinkwell packages into CJS format.
 
 ## Phase 4: TypeScript Support
 
-- [ ] Test Node 24's `--experimental-strip-types` with pkg `--options` flag
-- [ ] Verify user `.ts` scripts work with type stripping
-- [ ] Test complex TypeScript patterns (generics, type-only imports)
-- [ ] Document unsupported TypeScript features (enums, namespaces, decorators)
-- [ ] Consider `--experimental-transform-types` as fallback if needed
+- [x] Test Node 24's `--experimental-strip-types` with pkg `--options` flag
+- [x] Verify user `.ts` scripts work with type stripping
+- [x] Test complex TypeScript patterns (generics, type-only imports)
+- [x] Document unsupported TypeScript features (enums, namespaces, decorators)
+- [x] Consider `--experimental-transform-types` as fallback if needed
+
+### Implementation Notes (Phase 4)
+
+**ESM bundling solution**: pkg doesn't properly resolve ESM imports inside its
+`/snapshot/` virtual filesystem. Solution: pre-bundle thinkwell packages into
+CJS format using esbuild (`scripts/bundle-for-pkg.ts` → `dist-pkg/*.cjs`).
+
+**TypeScript loading strategy**: Two paths based on whether transformation needed:
+1. **Direct require()** - Scripts without thinkwell imports use Node's native
+   type stripping via direct `require()`.
+2. **Transform + temp file** - Scripts with `thinkwell:*` or bundled package
+   imports are transformed, written to a temp file, then required.
+
+**Supported TypeScript features** (strip-only mode):
+- Type annotations, interfaces, type aliases
+- Generic functions and classes (no parameter properties)
+- Type-only imports (`import type {...}`, inline `type` specifier)
+- Type assertions (`as` keyword)
+
+**Unsupported features** (require `--experimental-transform-types`):
+- Enums (regular and const)
+- Namespaces
+- Parameter properties (`constructor(public x: number)`)
+- Legacy decorators
+- JSX in `.ts` files
+
+**Decision on transform-types**: Not implementing as fallback. The unsupported
+features are uncommon in modern TypeScript, and documenting them is sufficient.
+Users needing these features can pre-compile their scripts.
 
 ## Phase 5: @JSONSchema Processing
 
