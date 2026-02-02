@@ -128,12 +128,39 @@ users to upgrade Node.js.
 
 ## Phase 7: Testing
 
-- [ ] Port existing binary tests to use pkg-built binaries
-- [ ] Add integration test: user script imports from node_modules
-- [ ] Add integration test: ESM user script via require(esm)
-- [ ] Add integration test: TypeScript user script
-- [ ] Add integration test: @JSONSchema type processing
-- [ ] Test on all target platforms (CI matrix)
+- [x] Port existing binary tests to use pkg-built binaries
+- [x] Add integration test: user script imports from node_modules
+- [x] Add integration test: ESM user script via require(esm)
+- [x] Add integration test: TypeScript user script
+- [x] Add integration test: @JSONSchema type processing
+- [x] Test on all target platforms (CI matrix)
+
+### Implementation Notes (Phase 7)
+
+**Test file location**: Created `packages/thinkwell/src/cli/cli.test.ts` with comprehensive
+CLI integration tests covering both npm and pkg binary distributions.
+
+**Test coverage** (30 tests total):
+- npm distribution tests: help, version, error handling
+- pkg binary tests: help, version, script execution
+- TypeScript execution: type annotations, interfaces, generics, type-only imports
+- thinkwell imports: thinkwell:agent, thinkwell package, @thinkwell/acp
+- @JSONSchema processing: basic interfaces, nested objects, Schema namespace
+- ESM script execution: JavaScript and TypeScript
+- node_modules imports: local modules resolution
+- Script arguments: argument passing, run subcommand
+- Shebang support: stripping from scripts
+- Error handling: syntax errors, runtime errors, missing modules
+
+**CI/CD configuration**:
+- Created `.github/workflows/ci.yml` for continuous integration on all platforms
+- Updated `.github/workflows/release.yml` to use pkg instead of Bun
+- Platforms tested: darwin-arm64, darwin-x64, linux-x64, linux-arm64
+- All workflows now use Node.js 24 for TypeScript transform support
+
+**@JSONSchema test note**: Types marked with `@JSONSchema` generate a namespace with
+a `Schema` property (e.g., `Person.Schema.toJsonSchema()`), not a direct method on
+the type. Tests updated to use the correct API.
 
 ## Phase 8: Documentation & Cleanup
 

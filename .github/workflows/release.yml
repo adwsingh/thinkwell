@@ -16,18 +16,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -36,11 +31,19 @@ jobs:
       - name: Build TypeScript
         run: pnpm build
 
+      - name: Bundle for pkg
+        run: pnpm --filter thinkwell bundle:pkg
+
       - name: Build darwin-arm64 binary
-        run: pnpm --filter thinkwell build:binary darwin-arm64
+        run: pnpm --filter thinkwell build:binary:pkg darwin-arm64
 
       - name: Build darwin-x64 binary
-        run: pnpm --filter thinkwell build:binary darwin-x64
+        run: pnpm --filter thinkwell build:binary:pkg darwin-x64
+
+      - name: Run CLI tests (darwin-arm64)
+        run: pnpm --filter thinkwell test
+        env:
+          SKIP_INTEGRATION_TESTS: '1'
 
       - name: Create tarballs
         run: |
@@ -76,18 +79,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
 
-      - name: Setup Node.js
+      - name: Setup Node.js 24
         uses: actions/setup-node@v4
         with:
-          node-version: '22'
+          node-version: '24'
           cache: 'pnpm'
 
       - name: Install dependencies
@@ -96,8 +94,16 @@ jobs:
       - name: Build TypeScript
         run: pnpm build
 
+      - name: Bundle for pkg
+        run: pnpm --filter thinkwell bundle:pkg
+
       - name: Build binary
-        run: pnpm --filter thinkwell build:binary ${{ matrix.target }}
+        run: pnpm --filter thinkwell build:binary:pkg ${{ matrix.target }}
+
+      - name: Run CLI tests
+        run: pnpm --filter thinkwell test
+        env:
+          SKIP_INTEGRATION_TESTS: '1'
 
       - name: Create tarball
         run: |
