@@ -12,6 +12,7 @@
 import {
   existsSync,
   mkdirSync,
+  mkdtempSync,
   readFileSync,
   writeFileSync,
   rmSync,
@@ -23,10 +24,11 @@ import {
 import { dirname, resolve, basename, join, isAbsolute } from "node:path";
 import { fileURLToPath } from "node:url";
 import { styleText } from "node:util";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { createHash } from "node:crypto";
 import { spawn, execSync } from "node:child_process";
 import * as esbuild from "esbuild";
+import { transformJsonSchemas, hasJsonSchemaMarkers } from "./schema.js";
 
 // ============================================================================
 // Simple Spinner Implementation
@@ -422,8 +424,8 @@ function initBuildContext(options: BuildOptions): BuildContext {
     mergedOptions = mergeWithPackageConfig(mergedOptions, process.cwd());
   }
 
-  // Create build directory in the entry file's directory
-  const buildDir = join(entryDir, ".thinkwell-build");
+  // Create build directory in system temp directory using mkdtempSync for atomicity
+  const buildDir = mkdtempSync(join(tmpdir(), `thinkwell-build-${entryBasename}-`));
 
   // Find the thinkwell dist-pkg directory
   // When running from npm install: node_modules/thinkwell/dist-pkg
@@ -565,6 +567,33 @@ require.main = __origRequire.main;
       },
       // Resolve thinkwell imports to bundled versions during bundle time
       plugins: [
+        // Transform @JSONSchema types into namespace declarations with schema providers
+        {
+          name: "jsonschema-transformer",
+          setup(build) {
+            build.onLoad({ filter: /\.(ts|tsx|mts|cts)$/ }, async (args) => {
+              // Skip node_modules
+              if (args.path.includes("node_modules")) {
+                return null;
+              }
+
+              const source = readFileSync(args.path, "utf-8");
+
+              // Fast path: skip files without @JSONSchema markers
+              if (!hasJsonSchemaMarkers(source)) {
+                return null;
+              }
+
+              // Transform the source to inject schema namespaces
+              const transformed = transformJsonSchemas(args.path, source);
+
+              return {
+                contents: transformed,
+                loader: args.path.endsWith(".tsx") ? "tsx" : "ts",
+              };
+            });
+          },
+        },
         {
           name: "thinkwell-resolver",
           setup(build) {
@@ -1476,9 +1505,8 @@ async function runWatchMode(options: BuildOptions): Promise<void> {
   const watcher = fsWatch(watchDir, { recursive: true }, (_eventType, filename) => {
     if (!filename) return;
 
-    // Ignore build directory and common non-source files
+    // Ignore common non-source files
     if (
-      filename.includes(".thinkwell-build") ||
       filename.includes("node_modules") ||
       filename.startsWith(".") ||
       filename.endsWith(".d.ts")

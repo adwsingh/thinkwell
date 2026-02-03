@@ -22,8 +22,9 @@
  * runtime when the user script is executed.
  */
 
-import { readFileSync, mkdirSync, writeFileSync, unlinkSync } from "node:fs";
-import { dirname, join, isAbsolute, resolve } from "node:path";
+import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
+import { dirname, join, isAbsolute, resolve, basename } from "node:path";
+import { tmpdir } from "node:os";
 import { createRequire } from "node:module";
 import Module from "node:module";
 import { hasJsonSchemaMarkers, transformJsonSchemas } from "./schema.js";
@@ -372,18 +373,12 @@ export function loadScript(scriptPath: string): unknown {
   // Prepend import.meta.url patch so scripts can locate sibling files
   source = generateImportMetaPatch(absolutePath) + source;
 
-  // Write transformed source to a temp file
-  // Use the same extension to ensure Node applies the right loader
+  // Write transformed source to a temp file in os.tmpdir()
+  // Use mkdtempSync for atomic directory creation to avoid race conditions
   const ext = absolutePath.endsWith(".ts") ? ".ts" : ".js";
-  const tempDir = join(dirname(absolutePath), ".thinkwell-cache");
-  const tempFile = join(tempDir, `_transformed_${Date.now()}${ext}`);
-
-  try {
-    // Ensure temp directory exists
-    mkdirSync(tempDir, { recursive: true });
-  } catch {
-    // Directory may already exist
-  }
+  const scriptName = basename(absolutePath, ext);
+  const tempDir = mkdtempSync(join(tmpdir(), `thinkwell-${scriptName}-`));
+  const tempFile = join(tempDir, `script${ext}`);
 
   try {
     // Write transformed source
@@ -395,9 +390,9 @@ export function loadScript(scriptPath: string): unknown {
 
     return result;
   } finally {
-    // Clean up temp file
+    // Clean up temp directory and file
     try {
-      unlinkSync(tempFile);
+      rmSync(tempDir, { recursive: true });
     } catch {
       // Ignore cleanup errors
     }
