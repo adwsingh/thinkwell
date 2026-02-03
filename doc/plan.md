@@ -1,0 +1,27 @@
+# Implementation Plan: `thinkwell build` Command
+
+This plan implements the `thinkwell build` command as described in [RFD: user-build-command.md](rfd/user-build-command.md).
+
+## Phase 1: Core Command
+
+- [ ] Add `build` subcommand to CLI parser in `src/cli/main.ts`
+- [ ] Implement argument parsing for `--output`, `--target`, `--include`, `--verbose`
+- [ ] Create `src/cli/build.ts` module with build orchestration logic
+- [ ] Reuse existing `bundle-for-pkg.ts` logic for the bundling stage
+- [ ] Generate wrapper entry point that sets up `global.__bundled__`
+- [ ] Invoke pkg programmatically using `@yao-pkg/pkg` API
+
+## Phase 2: User Experience
+
+- [ ] Add progress indicators (spinner during bundling, step completion checkmarks)
+- [ ] Implement `--dry-run` flag to show what would be built
+- [ ] Add helpful error messages for common failures (missing dependencies, unsupported platform)
+- [ ] Detect and warn about top-level await usage (not supported)
+- [ ] Support `--quiet` flag for CI environments
+
+## Phase 3: Advanced Features
+
+- [ ] Add `--external` flag to exclude specific packages from bundling
+- [ ] Support configuration in `package.json` under `"thinkwell"` key
+- [ ] Add `--minify` flag for smaller binaries
+- [ ] Implement `--watch` mode for development iteration
