@@ -4,12 +4,12 @@ This plan implements the `thinkwell build` command as described in [RFD: user-bu
 
 ## Phase 1: Core Command
 
-- [ ] Add `build` subcommand to CLI parser in `src/cli/main.ts`
-- [ ] Implement argument parsing for `--output`, `--target`, `--include`, `--verbose`
-- [ ] Create `src/cli/build.ts` module with build orchestration logic
-- [ ] Reuse existing `bundle-for-pkg.ts` logic for the bundling stage
-- [ ] Generate wrapper entry point that sets up `global.__bundled__`
-- [ ] Invoke pkg programmatically using `@yao-pkg/pkg` API
+- [x] Add `build` subcommand to CLI parser in `src/cli/main.ts`
+- [x] Implement argument parsing for `--output`, `--target`, `--include`, `--verbose`
+- [x] Create `src/cli/build.ts` module with build orchestration logic
+- [x] Reuse existing `bundle-for-pkg.ts` logic for the bundling stage
+- [x] Generate wrapper entry point that sets up `global.__bundled__`
+- [x] Invoke pkg programmatically using `@yao-pkg/pkg` API
 
 ## Phase 2: User Experience
 

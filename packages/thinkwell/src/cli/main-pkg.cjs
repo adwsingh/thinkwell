@@ -79,6 +79,7 @@ thinkwell - Run TypeScript scripts with automatic schema generation
 Usage:
   thinkwell <script.ts> [args...]     Run a TypeScript script
   thinkwell run <script.ts> [args...] Explicit run command
+  thinkwell build <script.ts>         Compile to standalone executable
   thinkwell init [project-name]       Initialize a new project
   thinkwell types [dir]               Generate .d.ts files for IDE support
   thinkwell --help                    Show this help message
@@ -87,6 +88,7 @@ Usage:
 Examples:
   thinkwell hello.ts                 Run hello.ts
   thinkwell run hello.ts --verbose   Run with arguments
+  thinkwell build src/agent.ts       Compile to binary
   thinkwell init my-agent            Create a new project
   ./script.ts                        Via shebang: #!/usr/bin/env thinkwell
   thinkwell types                    Generate declarations in current dir
@@ -109,6 +111,29 @@ async function runInitCommand(args) {
   // Path: src/cli/ -> ../../dist/cli/init-command.js
   const { runInit } = require("../../dist/cli/init-command.js");
   await runInit(args);
+}
+
+/**
+ * Run the build command to compile scripts into standalone executables.
+ */
+async function runBuildCommand(args) {
+  // Check for help flag
+  if (args.includes("--help") || args.includes("-h")) {
+    const { showBuildHelp } = require("../../dist/cli/build.js");
+    showBuildHelp();
+    return;
+  }
+
+  // Import and run the build command
+  const { parseBuildArgs, runBuild } = require("../../dist/cli/build.js");
+
+  try {
+    const options = parseBuildArgs(args);
+    await runBuild(options);
+  } catch (error) {
+    console.error(`Error: ${error.message}`);
+    process.exit(1);
+  }
 }
 
 /**
@@ -192,6 +217,12 @@ async function main() {
   // Handle "init" subcommand - does NOT require bundled modules
   if (args[0] === "init") {
     await runInitCommand(args.slice(1));
+    process.exit(0);
+  }
+
+  // Handle "build" subcommand
+  if (args[0] === "build") {
+    await runBuildCommand(args.slice(1));
     process.exit(0);
   }
 
