@@ -1,8 +1,68 @@
-# Bun Workarounds
+# Workarounds
 
-This document tracks Bun bugs or limitations encountered during development and the workarounds we implemented.
+This document tracks bugs or limitations encountered during development and the workarounds we implemented.
 
-## 1. Runtime Plugin `onResolve` Doesn't Intercept URL-like Imports
+## pkg Workarounds
+
+### 1. TTY Access During Module Load Causes V8 Crash
+
+**pkg Version:** @yao-pkg/pkg 6.12.0
+**Node.js Version:** 24.x (embedded in pkg binary)
+**Platform:** macOS darwin-arm64 (confirmed), likely other platforms
+
+**Problem:** When running `thinkwell build` from a pkg-compiled binary in a TTY environment (where `process.stderr.isTTY === true`), the process crashes with a segmentation fault during V8 bootstrap.
+
+```
+$ thinkwell build src/greeting.ts
+Building greeting...
+
+zsh: segmentation fault  thinkwell build src/greeting.ts
+```
+
+The crash occurs after initial output but before the spinner starts.
+
+**Root Cause:** The `ora` spinner library depends on `restore-cursor`, which evaluates `process.stderr.isTTY` at module load time (not when the spinner is used). In pkg's virtual filesystem environment, this TTY access during Node.js bootstrap triggers a V8 crash in `node::Realm::ExecuteBootstrapper`.
+
+The problematic code in `restore-cursor`:
+```javascript
+var terminal = process.stderr.isTTY
+  ? process.stderr
+  : process.stdout.isTTY
+    ? process.stdout
+    : void 0;
+```
+
+This executes when the module is `require()`d, which happens during pkg's bootstrap phase.
+
+**Reproduction Matrix:**
+
+| Condition | stderr.isTTY | Result |
+|-----------|--------------|--------|
+| Normal TTY terminal | true | **CRASH** |
+| `2>/dev/null` | false | Works |
+| `2>&1 \| cat` | false | Works |
+| `CI=true` | true | Works (ora skips TTY code) |
+| Non-TTY environment | false | Works |
+
+**Workaround:** Replace `ora` with a custom spinner implementation that lazily checks `process.stderr.isTTY` only when `start()` is called, not at module load time.
+
+The custom spinner in [packages/thinkwell/src/cli/build.ts](../packages/thinkwell/src/cli/build.ts) provides the same user experience (animated spinner in TTY, static output in non-TTY) without the problematic module-load-time TTY access.
+
+**Upstream Issue:** Unknown whether this is a bug in pkg, Node.js, or an unavoidable limitation of pkg's virtual filesystem. The crash occurs deep in V8 internals during bootstrap, suggesting it may be a pkg issue with how it initializes the Node.js runtime.
+
+**Files Affected:**
+- [packages/thinkwell/src/cli/build.ts](../packages/thinkwell/src/cli/build.ts)
+- [packages/thinkwell/package.json](../packages/thinkwell/package.json) (removed ora dependency)
+
+**See Also:** [doc/debugging-build-crash.md](debugging-build-crash.md) for the full investigation.
+
+---
+
+## Historical Workarounds (No Longer In Use)
+
+The following workarounds were used when thinkwell was built on Bun. The project has since migrated to Node.js with pkg for binary distribution. These are preserved for reference.
+
+### Bun: Runtime Plugin `onResolve` Doesn't Intercept URL-like Imports
 
 **Bun Version:** 1.2.17
 
@@ -32,12 +92,9 @@ function rewriteThinkwellImports(source: string): string {
 }
 ```
 
-**Files Affected:**
-- [packages/bun-plugin/src/index.ts](../packages/bun-plugin/src/index.ts)
-
 ---
 
-## 2. Runtime Plugin `loader: "ts"` Doesn't Properly Transpile TypeScript
+### Bun: Runtime Plugin `loader: "ts"` Doesn't Properly Transpile TypeScript
 
 **Bun Version:** 1.2.17
 
@@ -56,12 +113,9 @@ function safeTranspile(source: string, loader: "ts" | "tsx", filePath: string): 
 return { contents: safeTranspile(modifiedSource, loader, path), loader: "js" };
 ```
 
-**Files Affected:**
-- [packages/bun-plugin/src/index.ts](../packages/bun-plugin/src/index.ts)
-
 ---
 
-## 3. `NODE_PATH` Doesn't Support Subpath Exports
+### Bun: `NODE_PATH` Doesn't Support Subpath Exports
 
 **Bun Version:** 1.2.17
 
@@ -88,8 +142,3 @@ export const THINKWELL_MODULES: Record<string, string> = {
   // ...
 };
 ```
-
-**Files Affected:**
-- [packages/thinkwell/src/index.ts](../packages/thinkwell/src/index.ts)
-- [packages/bun-plugin/src/modules.ts](../packages/bun-plugin/src/modules.ts)
-- [packages/cli/bin/thinkwell](../packages/cli/bin/thinkwell) (sets `NODE_PATH`)

@@ -26,8 +26,120 @@ import { styleText } from "node:util";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { spawn, execSync } from "node:child_process";
-import ora, { type Ora } from "ora";
 import * as esbuild from "esbuild";
+
+// ============================================================================
+// Simple Spinner Implementation
+// ============================================================================
+//
+// We use a custom spinner instead of ora because ora's restore-cursor dependency
+// evaluates process.stderr.isTTY at module load time, which crashes V8 during
+// bootstrap in pkg's virtual filesystem environment when stderr is a TTY.
+// See doc/debugging-build-crash.md for full analysis.
+//
+// This implementation lazily checks isTTY only when start() is called.
+
+interface Spinner {
+  start(text?: string): Spinner;
+  stop(): Spinner;
+  succeed(text?: string): Spinner;
+  fail(text?: string): Spinner;
+  text: string;
+}
+
+const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+const SPINNER_INTERVAL = 80;
+
+function createSpinnerImpl(options: { text: string; isSilent?: boolean }): Spinner {
+  let text = options.text;
+  let interval: ReturnType<typeof setInterval> | undefined;
+  let frameIndex = 0;
+  const isSilent = options.isSilent ?? false;
+
+  // Check TTY lazily - only when we actually try to render
+  const isTTY = () => process.stderr.isTTY === true;
+
+  const clearLine = () => {
+    if (isTTY()) {
+      process.stderr.write("\r\x1b[K");
+    }
+  };
+
+  const render = () => {
+    if (isSilent) return;
+    if (isTTY()) {
+      const frame = SPINNER_FRAMES[frameIndex % SPINNER_FRAMES.length];
+      process.stderr.write(`\r${frame} ${text}`);
+      frameIndex++;
+    }
+  };
+
+  const spinner: Spinner = {
+    get text() {
+      return text;
+    },
+    set text(value: string) {
+      text = value;
+    },
+
+    start(newText?: string) {
+      if (newText) text = newText;
+      if (isSilent) return this;
+
+      if (isTTY()) {
+        render();
+        interval = setInterval(render, SPINNER_INTERVAL);
+      } else {
+        // Non-TTY: just print the text with a dash prefix
+        process.stderr.write(`- ${text}\n`);
+      }
+      return this;
+    },
+
+    stop() {
+      if (interval) {
+        clearInterval(interval);
+        interval = undefined;
+      }
+      clearLine();
+      return this;
+    },
+
+    succeed(successText?: string) {
+      if (interval) {
+        clearInterval(interval);
+        interval = undefined;
+      }
+      if (isSilent) return this;
+
+      const finalText = successText ?? text;
+      if (isTTY()) {
+        process.stderr.write(`\r\x1b[K✔ ${finalText}\n`);
+      } else {
+        process.stderr.write(`✔ ${finalText}\n`);
+      }
+      return this;
+    },
+
+    fail(failText?: string) {
+      if (interval) {
+        clearInterval(interval);
+        interval = undefined;
+      }
+      if (isSilent) return this;
+
+      const finalText = failText ?? text;
+      if (isTTY()) {
+        process.stderr.write(`\r\x1b[K✖ ${finalText}\n`);
+      } else {
+        process.stderr.write(`✖ ${finalText}\n`);
+      }
+      return this;
+    },
+  };
+
+  return spinner;
+}
 
 // Handle both ESM and CJS contexts for __dirname
 // When bundled to CJS, import.meta.url won't work, but global __dirname will
@@ -583,7 +695,7 @@ function getNodePlatformArch(): { platform: string; arch: string } {
 async function downloadFile(
   url: string,
   destPath: string,
-  spinner?: Ora
+  spinner?: Spinner
 ): Promise<void> {
   const response = await fetch(url);
   if (!response.ok) {
@@ -674,7 +786,7 @@ function extractTarGz(archivePath: string, destDir: string): void {
  * Downloads from nodejs.org if not cached, verifies checksum, and extracts.
  * Returns the path to the node binary.
  */
-async function ensurePortableNode(spinner?: Ora): Promise<string> {
+async function ensurePortableNode(spinner?: Spinner): Promise<string> {
   const version = PORTABLE_NODE_VERSION;
   const { platform, arch } = getNodePlatformArch();
   const cacheDir = join(getCacheDir(), "node", `v${version}`);
@@ -895,7 +1007,7 @@ async function compileWithPkgSubprocess(
   wrapperPath: string,
   target: Exclude<Target, "host">,
   outputPath: string,
-  spinner?: Ora
+  spinner?: Spinner
 ): Promise<void> {
   // Ensure portable Node.js is available
   const nodePath = await ensurePortableNode(spinner);
@@ -970,7 +1082,7 @@ async function compileWithPkg(
   wrapperPath: string,
   target: Exclude<Target, "host">,
   outputPath: string,
-  spinner?: Ora
+  spinner?: Spinner
 ): Promise<void> {
   // When running from a compiled binary, use subprocess approach
   if (isRunningFromCompiledBinary()) {
@@ -1101,8 +1213,8 @@ function log(ctx: BuildContext, message: string): void {
 }
 
 /** Create a spinner respecting quiet mode */
-function createSpinner(ctx: BuildContext, text: string): Ora {
-  return ora({
+function createSpinner(ctx: BuildContext, text: string): Spinner {
+  return createSpinnerImpl({
     text,
     isSilent: ctx.options.quiet,
   });
