@@ -1,0 +1,117 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "maple",
+  "name": "Thinkwell",
+  "description": "A scripting environment for AI agents.",
+  "colors": {
+    "primary": "#0084d1",
+    "light": "#00bcff",
+    "dark": "#0084d1"
+  },
+  "background": {
+    "color": {
+      "light": "#f8f8f6",
+      "dark": "#12141A"
+    }
+  },
+  "fonts": {
+    "heading": {
+      "family": "Lora",
+      "format": "woff2"
+    },
+    "body": {
+      "family": "Public Sans",
+      "format": "woff2"
+    }
+  },
+  "favicon": {
+    "light": "/logo/favicon-wordmark.png",
+    "dark": "/logo/favicon-wordmark.png"
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/dherman/thinkwell"
+      }
+    ]
+  },
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Get Started",
+        "pages": [
+          "get-started/introduction",
+          "get-started/quickstart"
+        ]
+      },
+      {
+        "tab": "Examples",
+        "pages": [
+          "examples/hello-world",
+          "examples/sentiment-analysis",
+          "examples/meeting-scheduler",
+          "examples/javascript-unminifier"
+        ]
+      },
+      {
+        "tab": "API",
+        "pages": [
+          "api/overview",
+          "api/agent",
+          "api/connectors",
+          "api/sessions"
+        ]
+      },
+      {
+        "tab": "Community",
+        "pages": [
+          "community/contributing",
+          "community/code-of-conduct"
+        ]
+      }
+    ]
+  },
+  "logo": {
+    "light": "/logo/wordmark.png",
+    "dark": "/logo/wordmark.png"
+  },
+  "seo": {
+    "indexing": "navigable"
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/dherman/thinkwell"
+    }
+  },
+  "contextual": {
+    "options": ["copy", "view"]
+  },
+  "redirects": [
+    {
+      "source": "/overview/introduction",
+      "destination": "/get-started/introduction",
+      "permanent": true
+    },
+    {
+      "source": "/overview/architecture",
+      "destination": "/get-started/architecture",
+      "permanent": true
+    },
+    {
+      "source": "/overview/agents",
+      "destination": "/get-started/agents",
+      "permanent": true
+    },
+    {
+      "source": "/overview/clients",
+      "destination": "/get-started/clients",
+      "permanent": true
+    },
+    {
+      "source": "/registry",
+      "destination": "/get-started/registry",
+      "permanent": false
+    }
+  ]
+}
