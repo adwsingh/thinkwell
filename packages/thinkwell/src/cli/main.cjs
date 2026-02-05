@@ -18,7 +18,7 @@ const { resolve, isAbsolute } = require("node:path");
 const { styleText } = require('node:util');
 
 // Version must be updated manually to match package.json
-const VERSION = "0.4.4";
+const VERSION = "0.4.5";
 
 // ============================================================================
 // Bundled Module Registration
