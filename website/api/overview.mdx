@@ -3,4 +3,72 @@ title: "Overview"
 description: "Overview of the Thinkwell API."
 ---
 
-_Under construction. Please check back again soon._
+Thinkwell provides a TypeScript API for integrating AI agents into your applications. The library connects to AI coding agents via the Agent Client Protocol (ACP) and provides a fluent interface for building prompts, managing sessions, and handling typed responses.
+
+## Module Structure
+
+Thinkwell exports its API through two subpaths:
+
+### Main Types (`thinkwell:agent`)
+
+```typescript
+import { Agent, Session } from "thinkwell:agent";
+```
+
+| Type | Produced By | Description |
+|--------|-------------|-------------|
+| `Agent` | `Agent.connect()` | Main entry point for connecting to AI agents |
+| `Session` | `agent.createSession()` | Manages multi-turn conversations with persistent context |
+| `ThinkBuilder` | `agent.think()` | Fluent API for building prompts with tools |
+
+### Connectors (`thinkwell:connectors`)
+
+```typescript
+import { CLAUDE_CODE, CODEX, GEMINI, OPENCODE, AUGMENT, KIRO } from "thinkwell:connectors";
+```
+
+Pre-configured connector strings for popular AI agents. See [Connectors](/api/connectors) for details.
+
+## Architecture
+
+Thinkwell follows a layered architecture:
+
+1. **Agent** - Establishes a connection to an AI agent via ACP. Create one with `Agent.connect()`.
+
+2. **Sessions** - Agents support two interaction modes:
+   - **Ephemeral**: Use `agent.think()` for single-turn interactions
+   - **Persistent**: Use `agent.createSession()` for multi-turn conversations
+
+3. **ThinkBuilder** - A fluent API for constructing prompts. Chain methods to build content, then call `.run()` to execute.
+
+## Structured Output with @JSONSchema
+
+Thinkwell uses the `@JSONSchema` JSDoc tag to define expected AI output structures. The CLI generates JSON Schemas from your TypeScript interfaces at build time:
+
+```typescript
+/**
+ * Analysis result from code review.
+ * @JSONSchema
+ */
+export interface AnalysisResult {
+  /** List of issues found */
+  issues: Array<{
+    severity: "low" | "medium" | "high";
+    description: string;
+  }>;
+  /** Overall summary */
+  summary: string;
+}
+
+// The schema is available as a static property
+const result = await agent.think(AnalysisResult.Schema).text("...").run();
+```
+
+JSDoc comments become `description` fields in the generated schema, helping the AI understand what each field should contain.
+
+## Next Steps
+
+- [Agent](/api/agent) - Connecting to agents and managing sessions
+- [ThinkBuilder](/api/think-builder) - Building prompts with the fluent API
+- [Connectors](/api/connectors) - Available agent connectors
+- [Sessions](/api/sessions) - Multi-turn conversations

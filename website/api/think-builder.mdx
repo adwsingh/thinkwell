@@ -1,0 +1,246 @@
+---
+title: "ThinkBuilder"
+description: "The fluent API for building prompts."
+---
+
+The `ThinkBuilder` class provides a fluent interface for constructing prompts. You obtain a `ThinkBuilder` by calling `agent.think()` or `session.think()`, then chain methods to build up your prompt content before executing with `.run()`.
+
+## Basic Usage
+
+```typescript
+import { Agent } from "thinkwell:agent";
+import { CLAUDE_CODE } from "thinkwell:connectors";
+
+/** @JSONSchema */
+interface Summary {
+  title: string;
+  points: string[];
+}
+
+const agent = await Agent.connect(CLAUDE_CODE);
+
+const result = await agent
+  .think(Summary.Schema)      // Start building with output schema
+  .text("Summarize this:")    // Add prompt text
+  .quote(documentContent)     // Add quoted content
+  .run();                     // Execute and get typed result
+
+agent.close();
+```
+
+## Content Methods
+
+These methods add content to your prompt.
+
+### `.text(content)`
+
+Adds literal text to the prompt.
+
+```typescript
+.text("Analyze the following code for potential bugs.")
+```
+
+### `.textln(content)`
+
+Adds text with a trailing newline. Useful when building prompts incrementally.
+
+```typescript
+.textln("First, identify the main function.")
+.textln("Then, trace the data flow.")
+```
+
+### `.quote(content, label?)`
+
+Adds content wrapped in XML-style tags. Use this for user input, documents, or any content that should be clearly delimited from instructions.
+
+```typescript
+// Without label
+.quote(userInput)
+
+// With label for clarity
+.quote(customerFeedback, "feedback")
+.quote(companyPolicy, "policy document")
+```
+
+The label helps the AI understand what the quoted content represents.
+
+### `.code(content, language?)`
+
+Adds content as a fenced Markdown code block. Use this when including source code in your prompt.
+
+```typescript
+// Without language hint
+.code(sourceCode)
+
+// With language for syntax context
+.code(jsCode, "javascript")
+.code(pythonCode, "python")
+```
+
+## Tool Methods
+
+Tools allow the AI agent to call back into your code during prompt execution.
+
+### `.tool(name, description, handler)` - Simple Form
+
+Register a tool that takes no input parameters.
+
+```typescript
+.tool(
+  "current_time",
+  "Returns the current date and time.",
+  async () => ({
+    time: new Date().toLocaleTimeString(),
+    date: new Date().toLocaleDateString(),
+    timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+  })
+)
+```
+
+### `.tool(name, description, inputSchema, handler)` - With Input Schema
+
+Register a tool with typed, validated input. Define the input shape using an interface with `@JSONSchema`:
+
+```typescript
+/** @JSONSchema */
+interface SearchInput {
+  /** Glob pattern to match files */
+  pattern: string;
+  /** Maximum number of results */
+  limit?: number;
+}
+
+.tool(
+  "search_files",
+  "Search for files matching a glob pattern.",
+  SearchInput.Schema,
+  async (input) => {
+    // input is typed as SearchInput
+    const files = await glob(input.pattern);
+    return { files: files.slice(0, input.limit ?? 10) };
+  }
+)
+```
+
+The schema serves three purposes:
+1. Tells the AI how to format tool calls
+2. Validates incoming calls at runtime
+3. Provides TypeScript typing for your handler
+
+## Configuration Methods
+
+### `.cwd(path)`
+
+Sets the working directory for the session. This affects where the agent looks for files when using its built-in tools.
+
+```typescript
+.cwd("/path/to/project")
+```
+
+## Execution
+
+### `.run()`
+
+Executes the prompt and returns the typed result. This is always the final method in the chain.
+
+```typescript
+const result = await agent
+  .think(OutputSchema)
+  .text("Your prompt here")
+  .run();
+// result is typed according to OutputSchema
+```
+
+## Complete Example
+
+Here's a complete example showing multiple ThinkBuilder features:
+
+```typescript
+import { Agent } from "thinkwell:agent";
+import { CLAUDE_CODE } from "thinkwell:connectors";
+import * as fs from "fs/promises";
+
+/**
+ * Result of analyzing a codebase.
+ * @JSONSchema
+ */
+interface CodeAnalysis {
+  /** Main programming language detected */
+  language: string;
+  /** List of potential issues */
+  issues: Array<{
+    file: string;
+    line: number;
+    description: string;
+    severity: "low" | "medium" | "high";
+  }>;
+  /** Summary of the codebase */
+  summary: string;
+}
+
+/**
+ * Input for reading a file.
+ * @JSONSchema
+ */
+interface ReadFileInput {
+  /** Path to the file to read */
+  path: string;
+}
+
+async function analyzeProject(projectPath: string) {
+  const agent = await Agent.connect(CLAUDE_CODE);
+
+  try {
+    const analysis = await agent
+      .think(CodeAnalysis.Schema)
+      .cwd(projectPath)
+      .text(`
+        Analyze this codebase for potential issues.
+        Use the read_file tool to examine source files.
+        Focus on bugs, security issues, and code smells.
+      `)
+      .tool(
+        "read_file",
+        "Read the contents of a file in the project.",
+        ReadFileInput.Schema,
+        async (input) => {
+          const content = await fs.readFile(input.path, "utf-8");
+          return { content };
+        }
+      )
+      .tool(
+        "list_files",
+        "List all files in the project directory.",
+        async () => {
+          const files = await fs.readdir(projectPath, { recursive: true });
+          return { files };
+        }
+      )
+      .run();
+
+    return analysis;
+  } finally {
+    agent.close();
+  }
+}
+```
+
+## Method Chaining Order
+
+While most methods can be called in any order, we recommend this sequence for readability:
+
+1. `.think(schema)` - Always first (starts the builder)
+2. `.cwd(path)` - Configuration
+3. `.text()` / `.textln()` / `.quote()` / `.code()` - Main prompt instructions
+4. `.tool()` - Tool definitions
+5. `.run()` - Always last (executes the prompt)
+
+```typescript
+const result = await agent
+  .think(OutputSchema)            // 1. Schema
+  .cwd("/my/project")             // 2. Config
+  .text("Analyze this code:")     // 3. Instructions
+  .code(sourceCode, "typescript")
+  .tool("helper", "...", handler) // 4. Tools
+  .run();                         // 5. Execute
+```
