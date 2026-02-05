@@ -9,7 +9,7 @@ RFD: [doc/rfd/bun-removal.md](rfd/bun-removal.md)
 
 ## Phase 2: Remove Bun Entry Point
 
-- [ ] Delete `packages/thinkwell/src/cli/main.ts`
+- [x] Delete `packages/thinkwell/src/cli/main.ts`
 
 ## Phase 3: Update Dependencies
 
