@@ -1,0 +1,136 @@
+---
+title: "CLI Reference"
+description: "Complete reference for the thinkwell command-line interface."
+---
+
+The `thinkwell` CLI is the primary way to run and build Thinkwell agent scripts.
+
+## Usage
+
+```bash
+thinkwell <script.ts> [args...]     # Run a TypeScript script
+thinkwell run <script.ts> [args...] # Explicit run command
+thinkwell build <script.ts>         # Compile to standalone executable
+thinkwell --help                    # Show help message
+thinkwell --version                 # Show version
+```
+
+## Running Scripts
+
+The simplest way to run a Thinkwell script is to pass it directly to the CLI:
+
+```bash
+thinkwell my-agent.ts
+```
+
+This runs your TypeScript file with native TypeScript support—no compilation step required. The CLI automatically resolves `thinkwell:*` imports and processes `@JSONSchema` annotations.
+
+You can pass arguments to your script after the filename:
+
+```bash
+thinkwell my-agent.ts --input data.json --verbose
+```
+
+### The `run` Subcommand
+
+The explicit `run` subcommand is equivalent to passing a script directly:
+
+```bash
+thinkwell run my-agent.ts --input data.json
+```
+
+## Building Executables
+
+Compile your script into a standalone executable that can run without Node.js or Thinkwell installed:
+
+```bash
+thinkwell build src/agent.ts
+```
+
+The resulting binary includes:
+- Node.js 24 runtime with native TypeScript support
+- All thinkwell packages
+- Your bundled application code
+
+### Build Options
+
+| Option | Description |
+|--------|-------------|
+| `-o, --output <path>` | Output file path (default: `./<name>-<target>`) |
+| `-t, --target <target>` | Target platform (can be specified multiple times) |
+| `--include <glob>` | Additional files to embed as assets |
+| `-e, --external <pkg>` | Exclude package from bundling (can be repeated) |
+| `-m, --minify` | Minify the bundled code for smaller output |
+| `-w, --watch` | Watch for changes and rebuild automatically |
+| `-n, --dry-run` | Show what would be built without building |
+| `-q, --quiet` | Suppress all output except errors (for CI) |
+| `-v, --verbose` | Show detailed build output |
+
+### Target Platforms
+
+| Target | Description |
+|--------|-------------|
+| `host` | Current platform (default) |
+| `darwin-arm64` | macOS on Apple Silicon |
+| `darwin-x64` | macOS on Intel |
+| `linux-x64` | Linux on x64 |
+| `linux-arm64` | Linux on ARM64 |
+
+### Examples
+
+```bash
+# Build for current platform
+thinkwell build src/agent.ts
+
+# Specify output path
+thinkwell build src/agent.ts -o dist/my-agent
+
+# Build for Linux
+thinkwell build src/agent.ts --target linux-x64
+
+# Multi-platform build
+thinkwell build src/agent.ts -t darwin-arm64 -t linux-x64
+
+# Preview build without executing
+thinkwell build src/agent.ts --dry-run
+
+# Keep sqlite3 as external dependency
+thinkwell build src/agent.ts -e sqlite3
+
+# Minify for smaller binary
+thinkwell build src/agent.ts --minify
+
+# Watch mode for development
+thinkwell build src/agent.ts --watch
+```
+
+### Configuration via package.json
+
+Set build defaults in your `package.json`:
+
+```json
+{
+  "thinkwell": {
+    "build": {
+      "output": "dist/my-agent",
+      "targets": ["darwin-arm64", "linux-x64"],
+      "external": ["sqlite3"],
+      "minify": true
+    }
+  }
+}
+```
+
+CLI options override `package.json` settings.
+
+<Note>
+Binaries are approximately 70-90 MB due to the embedded Node.js runtime. The `--minify` flag reduces bundle size, though the Node.js runtime dominates the total size.
+</Note>
+
+## Environment Variables
+
+| Variable | Description |
+|----------|-------------|
+| `THINKWELL_AGENT_CMD` | Default command to connect to an agent backend |
+| `THINKWELL_CACHE_DIR` | Override the cache directory (default: `~/.cache/thinkwell`) |
+| `DEBUG` | Enable debug output for troubleshooting |
