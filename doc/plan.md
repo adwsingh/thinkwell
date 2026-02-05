@@ -23,9 +23,9 @@ RFD: [doc/rfd/bun-removal.md](rfd/bun-removal.md)
 
 ## Phase 5: Verification
 
-- [ ] Run `pnpm build` to verify build works
-- [ ] Run `pnpm --filter thinkwell build:binary` to verify binary build
-- [ ] Test CLI commands: `run`, `build`, `init`
+- [x] Run `pnpm build` to verify build works
+- [x] Run `pnpm --filter thinkwell build:binary` to verify binary build
+- [x] Test CLI commands: `run`, `build`, `init`
 
 ## Out of Scope (Future Work)
 
