@@ -74,32 +74,19 @@ function registerBundledModules() {
 
 function showHelp() {
   console.log(`
-thinkwell - Run TypeScript scripts with automatic schema generation
+thinkwell - agent scripting made easy
 
 Usage:
   thinkwell <script.ts> [args...]     Run a TypeScript script
   thinkwell run <script.ts> [args...] Explicit run command
   thinkwell build <script.ts>         Compile to standalone executable
-  thinkwell init [project-name]       Initialize a new project
-  thinkwell types [dir]               Generate .d.ts files for IDE support
   thinkwell --help                    Show this help message
   thinkwell --version                 Show version
 
-Examples:
-  thinkwell hello.ts                 Run hello.ts
-  thinkwell run hello.ts --verbose   Run with arguments
-  thinkwell build src/agent.ts       Compile to binary
-  thinkwell init my-agent            Create a new project
-  ./script.ts                        Via shebang: #!/usr/bin/env thinkwell
-  thinkwell types                    Generate declarations in current dir
-  thinkwell types src                Generate declarations in src/
+Example:
+  thinkwell my-agent.ts
 
-The thinkwell CLI automatically:
-  - Generates JSON Schema for types marked with @JSONSchema
-  - Resolves thinkwell:* imports to built-in modules
-  - Creates .thinkwell.d.ts files for IDE autocomplete (types command)
-
-For more information, visit: https://github.com/dherman/thinkwell
+For more information, visit: https://thinkwell.sh
 `);
 }
 
@@ -224,11 +211,8 @@ async function runBuildCommand(args) {
  */
 async function runTypesCommand(args) {
   // For now, provide a helpful message
-  console.log("The 'types' command requires @JSONSchema processing.");
-  console.log("");
-  console.log("This feature will be available in a future release.");
-  console.log("For now, use the npm distribution with Bun for 'thinkwell types'.");
-  process.exit(0);
+  console.error("Not yet implemented.");
+  process.exit(1);
 }
 
 /**
