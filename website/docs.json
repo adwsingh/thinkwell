@@ -42,7 +42,8 @@
         "tab": "Get Started",
         "pages": [
           "get-started/introduction",
-          "get-started/quickstart"
+          "get-started/quickstart",
+          "get-started/cli"
         ]
       },
       {
