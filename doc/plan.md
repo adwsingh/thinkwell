@@ -4,8 +4,8 @@ RFD: [doc/rfd/bun-removal.md](rfd/bun-removal.md)
 
 ## Phase 1: Remove `@thinkwell/bun-plugin` Package
 
-- [ ] Delete `packages/bun-plugin/` directory
-- [ ] Remove from `pnpm-workspace.yaml` if listed
+- [x] Delete `packages/bun-plugin/` directory
+- [x] Remove from `pnpm-workspace.yaml` if listed (not needed - uses glob pattern)
 
 ## Phase 2: Remove Bun Entry Point
 
