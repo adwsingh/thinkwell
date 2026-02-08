@@ -1,0 +1,45 @@
+# Skill API Implementation Plan
+
+## 1. Types and SKILL.md parser (`@thinkwell/acp`)
+
+- [ ] Add `packages/acp/src/skill.ts` with `Skill`, `VirtualSkill`, `StoredSkill`, `SkillTool` types
+- [ ] Implement `parseSkillMd(content: string): Skill` — extract YAML frontmatter, validate name/description, return body
+- [ ] Validate name: 1-64 chars, lowercase alphanumeric + hyphens, no leading/trailing/consecutive hyphens
+- [ ] Validate description: 1-1024 chars, non-empty
+- [ ] Preserve optional fields (`license`, `compatibility`, `metadata`) without acting on them
+- [ ] Export types and parser from `packages/acp/src/index.ts`
+- [ ] Tests for parser: valid SKILL.md, missing name, missing description, invalid name format, optional fields
+
+## 2. Skill MCP server (`@thinkwell/acp`)
+
+- [ ] Add `packages/acp/src/skill-server.ts` with a function that builds an `McpServer` for skills
+- [ ] Implement `activate_skill` handler: look up skill by name, return body as text content
+- [ ] Implement `call_skill_tool` handler: look up skill, look up tool by name, call handler, return result
+- [ ] Implement `read_skill_file` handler: validate skill has `basePath`, resolve path, validate no traversal, read text file
+- [ ] All three tools use the `defineTool` pattern (hidden from prompt)
+- [ ] Tests for each handler: happy path, unknown skill, unknown tool, path traversal rejection
+
+## 3. ThinkBuilder `.skill()` method (`thinkwell`)
+
+- [ ] Add internal `_skills` state to ThinkBuilder (list preserving attachment order)
+- [ ] Add `.skill(pathOrDef)` overloaded method: string → deferred stored skill, object → virtual skill
+- [ ] Validate virtual skill definitions eagerly (name, description format)
+- [ ] Stored skill paths are recorded but SKILL.md is parsed at `run()` time
+
+## 4. Prompt assembly (`thinkwell`)
+
+- [ ] At `run()` time, resolve stored skills: parse SKILL.md, record basePath, throw on invalid
+- [ ] Build `<available_skills>` XML block from all resolved skill metadata (name + description)
+- [ ] Prepend skills block + infrastructure instructions before user prompt parts
+- [ ] Skills listed in attachment order
+
+## 5. MCP server registration (`thinkwell`)
+
+- [ ] At `run()` time, if skills are present, build and register the skill MCP server
+- [ ] Pass resolved skills (with handlers and basePaths) to the server builder
+- [ ] Register on the same `mcpHandler` used for the existing thinkwell server
+
+## 6. Exports
+
+- [ ] Export `Skill`, `VirtualSkill`, `StoredSkill`, `SkillTool` types from `thinkwell` package
+- [ ] Export `parseSkillMd` from `@thinkwell/acp` (useful for advanced users)
