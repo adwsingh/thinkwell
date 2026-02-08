@@ -1,5 +1,7 @@
 # RFD: Migrate VSCode Extension to `tsgo` IPC API
 
+**Depends on:** [vscode-ts-plugin](vscode-ts-plugin.md)
+
 ## Summary
 
 Migrate the Thinkwell VSCode extension from the TypeScript Language Service Plugin API (which TypeScript 7 discontinues) to the new `tsgo` IPC-based API. The `tsgo` API provides a sanctioned mechanism for virtual file provision via `callbackfs`, enabling the same `@JSONSchema` augmentation without monkey-patching — and with a stable foundation for the TypeScript Go era.
