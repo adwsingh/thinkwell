@@ -7,7 +7,6 @@ import {
   validateSkillName,
   validateSkillDescription,
   type SchemaProvider,
-  type SessionUpdate,
   type VirtualSkill,
   type StoredSkill,
   type SkillTool,
@@ -18,6 +17,8 @@ import type {
   NewSessionRequest,
   McpServer as AcpMcpServer,
 } from "@agentclientprotocol/sdk";
+import type { ThoughtEvent } from "./thought-event.js";
+import { ThoughtStream } from "./thought-stream.js";
 
 /**
  * A deferred stored skill: the path to a SKILL.md file that will be
@@ -64,14 +65,17 @@ interface ToolDefinition<I = unknown, O = unknown> {
   includeInPrompt: boolean;
 }
 
+/** Internal event type: ThoughtEvent from the agent, or a synthetic stop signal. */
+type InternalUpdate = ThoughtEvent | { type: "stop"; reason: string };
+
 /**
  * Internal session handler for ThinkBuilder
  */
 class ThinkSession implements SessionHandler {
   readonly sessionId: string;
   private readonly _conn: AgentConnection;
-  private _pendingUpdates: SessionUpdate[] = [];
-  private _updateResolvers: Array<(update: SessionUpdate) => void> = [];
+  private _pendingUpdates: InternalUpdate[] = [];
+  private _updateResolvers: Array<(update: InternalUpdate) => void> = [];
   private _closed: boolean = false;
 
   constructor(sessionId: string, conn: AgentConnection) {
@@ -85,11 +89,15 @@ class ThinkSession implements SessionHandler {
       prompt: [{ type: "text", text: content }],
     });
     if (response.stopReason) {
-      this.pushUpdate({ type: "stop", reason: response.stopReason });
+      this._pushInternal({ type: "stop", reason: response.stopReason });
     }
   }
 
-  pushUpdate(update: SessionUpdate): void {
+  pushUpdate(update: ThoughtEvent): void {
+    this._pushInternal(update);
+  }
+
+  private _pushInternal(update: InternalUpdate): void {
     if (this._updateResolvers.length > 0) {
       const resolver = this._updateResolvers.shift()!;
       resolver(update);
@@ -98,7 +106,7 @@ class ThinkSession implements SessionHandler {
     }
   }
 
-  async readUpdate(): Promise<SessionUpdate> {
+  async readUpdate(): Promise<InternalUpdate> {
     if (this._pendingUpdates.length > 0) {
       return this._pendingUpdates.shift()!;
     }
@@ -491,15 +499,23 @@ export class ThinkBuilder<Output> {
    * 6. Returns the typed result
    */
   async run(): Promise<Output> {
-    return new Promise<Output>((resolve, reject) => {
-      this._executeRun(resolve, reject).catch(reject);
-    });
+    return this.stream().result;
   }
 
-  private async _executeRun(
-    resolve: (value: Output) => void,
-    reject: (error: Error) => void
-  ): Promise<void> {
+  /**
+   * Start executing the prompt, returning a stream handle that provides
+   * both an async iterable of intermediate `ThoughtEvent`s and a `.result`
+   * promise for the final typed output.
+   *
+   * Execution begins eagerly — the returned stream is already "hot".
+   */
+  stream(): ThoughtStream<Output> {
+    const stream = new ThoughtStream<Output>();
+    this._executeStream(stream).catch((err) => stream.rejectResult(err));
+    return stream;
+  }
+
+  private async _executeStream(stream: ThoughtStream<Output>): Promise<void> {
     // Ensure initialized
     if (!this._conn.initialized) {
       await this._conn.connection.initialize({
@@ -627,24 +643,26 @@ export class ThinkBuilder<Output> {
         // Send the prompt
         await session.sendPrompt(prompt);
 
-        // Read updates until we get a result or the session ends
+        // Read updates, forwarding events to the stream and watching for result
         while (!resultReceived) {
           const update = await session.readUpdate();
 
           if (update.type === "stop") {
             if (!resultReceived) {
-              reject(new Error("Session ended without calling return_result"));
+              stream.rejectResult(new Error("Session ended without calling return_result"));
             }
             break;
           }
 
-          // Tool calls are handled by the MCP server
+          // Forward the event to stream consumers
+          stream.pushEvent(update);
         }
 
         if (resultReceived && result !== undefined) {
-          resolve(result);
+          stream.resolveResult(result);
         }
       } finally {
+        stream.close();
         session.close();
         this._conn.sessionHandlers.delete(sessionId);
       }
