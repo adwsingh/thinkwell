@@ -28,10 +28,10 @@
 
 ## 4. Prompt assembly (`thinkwell`)
 
-- [ ] At `run()` time, resolve stored skills: parse SKILL.md, record basePath, throw on invalid
-- [ ] Build `<available_skills>` XML block from all resolved skill metadata (name + description)
-- [ ] Prepend skills block + infrastructure instructions before user prompt parts
-- [ ] Skills listed in attachment order
+- [x] At `run()` time, resolve stored skills: parse SKILL.md, record basePath, throw on invalid
+- [x] Build `<available_skills>` XML block from all resolved skill metadata (name + description)
+- [x] Prepend skills block + infrastructure instructions before user prompt parts
+- [x] Skills listed in attachment order
 
 ## 5. MCP server registration (`thinkwell`)
 

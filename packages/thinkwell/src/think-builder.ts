@@ -1,11 +1,17 @@
+import { readFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import {
   mcpServer,
+  createSkillServer,
+  parseSkillMd,
   validateSkillName,
   validateSkillDescription,
   type SchemaProvider,
   type SessionUpdate,
   type VirtualSkill,
+  type StoredSkill,
   type SkillTool,
+  type ResolvedSkill,
 } from "@thinkwell/acp";
 import type { AgentConnection, SessionHandler } from "./agent.js";
 import type {
@@ -416,6 +422,64 @@ export class ThinkBuilder<Output> {
   }
 
   /**
+   * Resolve all deferred skills into ResolvedSkill instances.
+   *
+   * - Virtual skills are passed through as-is.
+   * - Stored skills are loaded from disk: SKILL.md is parsed and basePath is
+   *   set to the directory containing the file.
+   *
+   * Skills are returned in attachment order.
+   */
+  private async _resolveSkills(): Promise<ResolvedSkill[]> {
+    const resolved: ResolvedSkill[] = [];
+
+    for (const deferred of this._skills) {
+      if (deferred.type === "virtual") {
+        resolved.push(deferred.skill);
+      } else {
+        const content = await readFile(deferred.path, "utf-8");
+        const parsed = parseSkillMd(content);
+        const stored: StoredSkill = {
+          name: parsed.name,
+          description: parsed.description,
+          body: parsed.body,
+          basePath: dirname(deferred.path),
+        };
+        resolved.push(stored);
+      }
+    }
+
+    return resolved;
+  }
+
+  /**
+   * Build the `<available_skills>` XML block and infrastructure instructions.
+   *
+   * Returns the string to prepend before the user's prompt parts, or an
+   * empty string when no skills are attached.
+   */
+  private _buildSkillsPrompt(skills: ResolvedSkill[]): string {
+    if (skills.length === 0) return "";
+
+    let xml = "<available_skills>\n";
+    for (const skill of skills) {
+      xml += `  <skill>\n`;
+      xml += `    <name>${skill.name}</name>\n`;
+      xml += `    <description>${skill.description}</description>\n`;
+      xml += `  </skill>\n`;
+    }
+    xml += "</available_skills>\n";
+
+    xml += "\n";
+    xml += "The above skills are available to you. When a task matches a skill's description,\n";
+    xml += "call the `activate_skill` tool with the skill name to load its full instructions.\n";
+    xml += "If the skill provides tools, use `call_skill_tool` to invoke them.\n";
+    xml += "If the skill references files, use `read_skill_file` to access them.\n";
+
+    return xml + "\n";
+  }
+
+  /**
    * Execute the prompt and return the result.
    *
    * This method:
@@ -445,8 +509,11 @@ export class ThinkBuilder<Output> {
       this._conn.initialized = true;
     }
 
-    // Build the prompt
-    let prompt = this._promptParts.join("");
+    // Resolve deferred skills
+    const resolvedSkills = await this._resolveSkills();
+
+    // Build the prompt: skills block first, then user prompt parts
+    let prompt = this._buildSkillsPrompt(resolvedSkills) + this._promptParts.join("");
 
     // Add tool references to the prompt
     const toolsWithPrompt = Array.from(this._tools.values()).filter(

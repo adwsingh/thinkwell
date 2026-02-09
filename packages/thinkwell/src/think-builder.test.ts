@@ -1,7 +1,14 @@
 import { describe, it } from "node:test";
 import assert from "node:assert";
-import { validateSkillName, validateSkillDescription } from "../../acp/src/skill.js";
-import type { SkillTool } from "../../acp/src/skill.js";
+import { writeFile, mkdir, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { randomUUID } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { dirname } from "node:path";
+import { validateSkillName, validateSkillDescription, parseSkillMd } from "../../acp/src/skill.js";
+import type { SkillTool, VirtualSkill, StoredSkill } from "../../acp/src/skill.js";
+import type { ResolvedSkill } from "../../acp/src/skill-server.js";
 
 /**
  * Since ThinkBuilder requires a live connection to run, we test
@@ -68,8 +75,51 @@ describe("ThinkBuilder prompt composition", () => {
       return this;
     }
 
-    buildPrompt(): string {
-      let prompt = this._promptParts.join("");
+    async resolveSkills(): Promise<ResolvedSkill[]> {
+      const resolved: ResolvedSkill[] = [];
+
+      for (const deferred of this._skills) {
+        if (deferred.type === "virtual") {
+          resolved.push(deferred.skill);
+        } else {
+          const content = await readFile(deferred.path, "utf-8");
+          const parsed = parseSkillMd(content);
+          const stored: StoredSkill = {
+            name: parsed.name,
+            description: parsed.description,
+            body: parsed.body,
+            basePath: dirname(deferred.path),
+          };
+          resolved.push(stored);
+        }
+      }
+
+      return resolved;
+    }
+
+    buildSkillsPrompt(skills: ResolvedSkill[]): string {
+      if (skills.length === 0) return "";
+
+      let xml = "<available_skills>\n";
+      for (const skill of skills) {
+        xml += `  <skill>\n`;
+        xml += `    <name>${skill.name}</name>\n`;
+        xml += `    <description>${skill.description}</description>\n`;
+        xml += `  </skill>\n`;
+      }
+      xml += "</available_skills>\n";
+
+      xml += "\n";
+      xml += "The above skills are available to you. When a task matches a skill's description,\n";
+      xml += "call the `activate_skill` tool with the skill name to load its full instructions.\n";
+      xml += "If the skill provides tools, use `call_skill_tool` to invoke them.\n";
+      xml += "If the skill references files, use `read_skill_file` to access them.\n";
+
+      return xml + "\n";
+    }
+
+    buildPrompt(resolvedSkills: ResolvedSkill[] = []): string {
+      let prompt = this.buildSkillsPrompt(resolvedSkills) + this._promptParts.join("");
 
       const toolsWithPrompt = Array.from(this._tools.values()).filter(
         (t) => t.includeInPrompt
@@ -334,6 +384,190 @@ describe("ThinkBuilder prompt composition", () => {
 
       assert.strictEqual(builder.getSkills().length, 1);
       assert.deepStrictEqual(builder.getToolNames(), ["my-tool"]);
+    });
+  });
+
+  describe("skill prompt assembly", () => {
+    it("should produce empty string when no skills are present", () => {
+      const builder = new TestableThinkBuilder();
+      const skillsPrompt = builder.buildSkillsPrompt([]);
+      assert.strictEqual(skillsPrompt, "");
+    });
+
+    it("should build available_skills XML block for a single skill", () => {
+      const builder = new TestableThinkBuilder();
+      const skills: ResolvedSkill[] = [
+        { name: "code-review", description: "Reviews code for bugs.", body: "# Instructions" },
+      ];
+      const skillsPrompt = builder.buildSkillsPrompt(skills);
+
+      assert.ok(skillsPrompt.includes("<available_skills>"));
+      assert.ok(skillsPrompt.includes("</available_skills>"));
+      assert.ok(skillsPrompt.includes("<name>code-review</name>"));
+      assert.ok(skillsPrompt.includes("<description>Reviews code for bugs.</description>"));
+      assert.ok(skillsPrompt.includes("activate_skill"));
+    });
+
+    it("should list multiple skills in attachment order", () => {
+      const builder = new TestableThinkBuilder();
+      const skills: ResolvedSkill[] = [
+        { name: "first-skill", description: "First.", body: "body1" },
+        { name: "second-skill", description: "Second.", body: "body2" },
+        { name: "third-skill", description: "Third.", body: "body3" },
+      ];
+      const skillsPrompt = builder.buildSkillsPrompt(skills);
+
+      const firstIdx = skillsPrompt.indexOf("<name>first-skill</name>");
+      const secondIdx = skillsPrompt.indexOf("<name>second-skill</name>");
+      const thirdIdx = skillsPrompt.indexOf("<name>third-skill</name>");
+
+      assert.ok(firstIdx < secondIdx, "first-skill should appear before second-skill");
+      assert.ok(secondIdx < thirdIdx, "second-skill should appear before third-skill");
+    });
+
+    it("should include infrastructure instructions", () => {
+      const builder = new TestableThinkBuilder();
+      const skills: ResolvedSkill[] = [
+        { name: "test-skill", description: "A test.", body: "body" },
+      ];
+      const skillsPrompt = builder.buildSkillsPrompt(skills);
+
+      assert.ok(skillsPrompt.includes("call the `activate_skill` tool"));
+      assert.ok(skillsPrompt.includes("`call_skill_tool`"));
+      assert.ok(skillsPrompt.includes("`read_skill_file`"));
+    });
+
+    it("should prepend skills block before user prompt parts", () => {
+      const builder = new TestableThinkBuilder()
+        .text("User prompt here.");
+
+      const skills: ResolvedSkill[] = [
+        { name: "my-skill", description: "My skill.", body: "body" },
+      ];
+      const prompt = builder.buildPrompt(skills);
+
+      const skillsEnd = prompt.indexOf("User prompt here.");
+      const xmlStart = prompt.indexOf("<available_skills>");
+      assert.ok(xmlStart >= 0, "should contain <available_skills>");
+      assert.ok(xmlStart < skillsEnd, "skills block should come before user prompt");
+    });
+
+    it("should not include skill body in prompt (progressive disclosure)", () => {
+      const builder = new TestableThinkBuilder();
+      const skills: ResolvedSkill[] = [
+        { name: "my-skill", description: "A skill.", body: "SECRET INSTRUCTIONS HERE" },
+      ];
+      const skillsPrompt = builder.buildSkillsPrompt(skills);
+
+      assert.ok(!skillsPrompt.includes("SECRET INSTRUCTIONS HERE"));
+    });
+
+    it("should produce no skills block when buildPrompt called without skills", () => {
+      const builder = new TestableThinkBuilder()
+        .text("Just a prompt.");
+
+      const prompt = builder.buildPrompt();
+      assert.ok(!prompt.includes("<available_skills>"));
+      assert.ok(prompt.startsWith("Just a prompt."));
+    });
+  });
+
+  describe("stored skill resolution", () => {
+    let tmpDir: string;
+
+    async function createTmpDir(): Promise<string> {
+      const dir = join(tmpdir(), `thinkwell-test-${randomUUID()}`);
+      await mkdir(dir, { recursive: true });
+      return dir;
+    }
+
+    it("should resolve a stored skill from a SKILL.md file", async () => {
+      tmpDir = await createTmpDir();
+      const skillPath = join(tmpDir, "SKILL.md");
+      await writeFile(skillPath, [
+        "---",
+        "name: file-skill",
+        "description: A skill loaded from disk.",
+        "---",
+        "",
+        "# Instructions",
+        "Do the thing from disk.",
+      ].join("\n"));
+
+      const builder = new TestableThinkBuilder().skill(skillPath);
+      const resolved = await builder.resolveSkills();
+
+      assert.strictEqual(resolved.length, 1);
+      assert.strictEqual(resolved[0].name, "file-skill");
+      assert.strictEqual(resolved[0].description, "A skill loaded from disk.");
+      assert.ok(resolved[0].body.includes("Do the thing from disk."));
+      assert.strictEqual((resolved[0] as StoredSkill).basePath, tmpDir);
+
+      await rm(tmpDir, { recursive: true });
+    });
+
+    it("should resolve virtual skills without filesystem access", async () => {
+      const builder = new TestableThinkBuilder()
+        .skill({ name: "virtual-one", description: "Virtual.", body: "Virtual body" });
+
+      const resolved = await builder.resolveSkills();
+
+      assert.strictEqual(resolved.length, 1);
+      assert.strictEqual(resolved[0].name, "virtual-one");
+      assert.strictEqual(resolved[0].body, "Virtual body");
+      assert.ok(!("basePath" in resolved[0]));
+    });
+
+    it("should preserve attachment order across mixed skill types", async () => {
+      tmpDir = await createTmpDir();
+      const skillPath = join(tmpDir, "SKILL.md");
+      await writeFile(skillPath, [
+        "---",
+        "name: stored-skill",
+        "description: From disk.",
+        "---",
+        "",
+        "Stored body.",
+      ].join("\n"));
+
+      const builder = new TestableThinkBuilder()
+        .skill({ name: "first-virtual", description: "First.", body: "body1" })
+        .skill(skillPath)
+        .skill({ name: "last-virtual", description: "Last.", body: "body3" });
+
+      const resolved = await builder.resolveSkills();
+
+      assert.strictEqual(resolved.length, 3);
+      assert.strictEqual(resolved[0].name, "first-virtual");
+      assert.strictEqual(resolved[1].name, "stored-skill");
+      assert.strictEqual(resolved[2].name, "last-virtual");
+
+      await rm(tmpDir, { recursive: true });
+    });
+
+    it("should throw when stored skill path does not exist", async () => {
+      const builder = new TestableThinkBuilder()
+        .skill("/nonexistent/path/SKILL.md");
+
+      await assert.rejects(
+        () => builder.resolveSkills(),
+        /ENOENT/
+      );
+    });
+
+    it("should throw when stored SKILL.md has invalid frontmatter", async () => {
+      tmpDir = await createTmpDir();
+      const skillPath = join(tmpDir, "SKILL.md");
+      await writeFile(skillPath, "No frontmatter here, just plain text.");
+
+      const builder = new TestableThinkBuilder().skill(skillPath);
+
+      await assert.rejects(
+        () => builder.resolveSkills(),
+        /SKILL\.md must begin with YAML frontmatter/
+      );
+
+      await rm(tmpDir, { recursive: true });
     });
   });
 });
