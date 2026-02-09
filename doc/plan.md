@@ -23,9 +23,9 @@ Implementation plan for the [Thought Stream RFD](rfd/thought-stream.md).
 
 ## Tests
 
-- [ ] Unit tests for `ThoughtStream` async iteration and `.result` independence
-- [ ] Unit tests for `ThoughtEvent` mapping from ACP notification types
-- [ ] Integration test: `stream()` with agent, verify events arrive and `.result` resolves
-- [ ] Integration test: `run()` still works after refactor (backward compat)
-- [ ] Test early termination (`break` from `for await`) doesn't break `.result`
-- [ ] Test fire-and-forget (`await stream.result` without iterating)
+- [x] Unit tests for `ThoughtStream` async iteration and `.result` independence
+- [x] Unit tests for `ThoughtEvent` mapping from ACP notification types
+- [x] Integration test: `stream()` with agent, verify events arrive and `.result` resolves
+- [x] Integration test: `run()` still works after refactor (backward compat)
+- [x] Test early termination (`break` from `for await`) doesn't break `.result`
+- [x] Test fire-and-forget (`await stream.result` without iterating)

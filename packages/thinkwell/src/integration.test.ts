@@ -1,6 +1,7 @@
-import { describe, it } from "node:test";
+import { describe, it, after } from "node:test";
 import assert from "node:assert";
-import { Agent, schemaOf } from "./index.js";
+import { Agent, schemaOf, ThoughtStream } from "./index.js";
+import type { ThoughtEvent } from "./index.js";
 
 /**
  * Integration tests for the thinkwell library.
@@ -24,6 +25,102 @@ describe("Thinkwell integration tests", { skip: SKIP_INTEGRATION }, () => {
       assert.ok(typeof Agent.connect === "function", "Agent.connect should be a static method");
       assert.ok(typeof schemaOf === "function", "schemaOf should be exported");
     });
+  });
+});
+
+/**
+ * Live agent integration tests for stream() and run().
+ *
+ * These require a running agent (AGENT_COMMAND env var) and ANTHROPIC_API_KEY.
+ * Skip with: SKIP_INTEGRATION_TESTS=1
+ */
+const SKIP_LIVE = SKIP_INTEGRATION || !process.env.AGENT_COMMAND;
+
+describe("Thought Stream live integration", { skip: SKIP_LIVE }, () => {
+  let agent: Agent;
+
+  // Shared agent connection — reused across tests
+  const agentCommand = process.env.AGENT_COMMAND ?? "npx -y @zed-industries/claude-code-acp";
+
+  after(() => {
+    if (agent) agent.close();
+  });
+
+  async function ensureAgent(): Promise<Agent> {
+    if (!agent) {
+      agent = await Agent.connect(agentCommand);
+    }
+    return agent;
+  }
+
+  const GreetingSchema = schemaOf<{ greeting: string }>({
+    type: "object",
+    properties: { greeting: { type: "string" } },
+    required: ["greeting"],
+  });
+
+  it("stream() should iterate and resolve .result", async () => {
+    const a = await ensureAgent();
+    const stream = a
+      .think(GreetingSchema)
+      .text("Say hello. Return a short greeting.")
+      .stream();
+
+    const events: ThoughtEvent[] = [];
+    for await (const event of stream) {
+      events.push(event);
+    }
+
+    // Iteration should complete (events may be empty if the agent jumps
+    // straight to return_result without emitting thoughts or messages)
+    assert.ok(Array.isArray(events), "Iteration should produce an array");
+
+    // .result should resolve to a valid greeting
+    const result = await stream.result;
+    assert.ok(typeof result.greeting === "string", "Expected greeting to be a string");
+    assert.ok(result.greeting.length > 0, "Expected non-empty greeting");
+  });
+
+  it("run() should return typed result (backward compat)", async () => {
+    const a = await ensureAgent();
+    const result = await a
+      .think(GreetingSchema)
+      .text("Say hello. Return a short greeting.")
+      .run();
+
+    assert.ok(typeof result.greeting === "string", "Expected greeting to be a string");
+    assert.ok(result.greeting.length > 0, "Expected non-empty greeting");
+  });
+
+  it("early termination: break from for-await should not break .result", async () => {
+    const a = await ensureAgent();
+    const stream = a
+      .think(GreetingSchema)
+      .text("Say hello. Return a short greeting.")
+      .stream();
+
+    // Break immediately after first event
+    let sawEvent = false;
+    for await (const _event of stream) {
+      sawEvent = true;
+      break;
+    }
+
+    // .result should still resolve even though we broke out early
+    const result = await stream.result;
+    assert.ok(typeof result.greeting === "string", "Expected greeting after early break");
+  });
+
+  it("fire-and-forget: await .result without iterating", async () => {
+    const a = await ensureAgent();
+    const stream = a
+      .think(GreetingSchema)
+      .text("Say hello. Return a short greeting.")
+      .stream();
+
+    // Never iterate — just await the result
+    const result = await stream.result;
+    assert.ok(typeof result.greeting === "string", "Expected greeting from fire-and-forget");
   });
 });
 

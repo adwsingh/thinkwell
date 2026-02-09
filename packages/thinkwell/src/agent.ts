@@ -384,8 +384,9 @@ function createClient(
 
 /**
  * Convert an ACP ContentBlock to a Thinkwell ContentBlock, or null if unsupported.
+ * @internal Exported for testing.
  */
-function convertContentBlock(block: AcpContentBlock): ContentBlock | null {
+export function convertContentBlock(block: AcpContentBlock): ContentBlock | null {
   switch (block.type) {
     case "text":
       return { type: "text", text: block.text };
@@ -400,8 +401,9 @@ function convertContentBlock(block: AcpContentBlock): ContentBlock | null {
 
 /**
  * Convert ACP ToolCallContent to Thinkwell ToolContent, or null if unsupported.
+ * @internal Exported for testing.
  */
-function convertToolCallContent(content: AcpToolCallContent): ToolContent | null {
+export function convertToolCallContent(content: AcpToolCallContent): ToolContent | null {
   switch (content.type) {
     case "diff":
       return { type: "diff", path: content.path, oldText: content.oldText ?? "", newText: content.newText };
@@ -416,9 +418,10 @@ function convertToolCallContent(content: AcpToolCallContent): ToolContent | null
 }
 
 /**
- * Convert ACP notification to ThoughtEvent
+ * Convert ACP notification to ThoughtEvent.
+ * @internal Exported for testing.
  */
-function convertNotification(notification: SessionNotification): ThoughtEvent | null {
+export function convertNotification(notification: SessionNotification): ThoughtEvent | null {
   const { update } = notification;
 
   switch (update.sessionUpdate) {
