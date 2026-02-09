@@ -1,6 +1,16 @@
+import { readFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import {
   mcpServer,
+  createSkillServer,
+  parseSkillMd,
+  validateSkillName,
+  validateSkillDescription,
   type SchemaProvider,
+  type VirtualSkill,
+  type StoredSkill,
+  type SkillTool,
+  type ResolvedSkill,
 } from "@thinkwell/acp";
 import type { AgentConnection, SessionHandler } from "./agent.js";
 import type {
@@ -9,6 +19,39 @@ import type {
 } from "@agentclientprotocol/sdk";
 import type { ThoughtEvent } from "./thought-event.js";
 import { ThoughtStream } from "./thought-stream.js";
+
+/**
+ * A deferred stored skill: the path to a SKILL.md file that will be
+ * parsed at run() time.
+ */
+interface DeferredStoredSkill {
+  type: "stored";
+  path: string;
+}
+
+/**
+ * A virtual skill definition provided programmatically.
+ * Validated eagerly at .skill() call time.
+ */
+interface DeferredVirtualSkill {
+  type: "virtual";
+  skill: VirtualSkill;
+}
+
+/**
+ * Internal representation of a skill attachment before resolution.
+ */
+type DeferredSkill = DeferredStoredSkill | DeferredVirtualSkill;
+
+/**
+ * Input for defining a virtual skill via the .skill() method.
+ */
+export interface VirtualSkillDefinition {
+  name: string;
+  description: string;
+  body: string;
+  tools?: SkillTool[];
+}
 
 /**
  * Tool definition for internal tracking
@@ -99,6 +142,7 @@ export class ThinkBuilder<Output> {
   private readonly _conn: AgentConnection;
   private _promptParts: string[] = [];
   private _tools: Map<string, ToolDefinition> = new Map();
+  private _skills: DeferredSkill[] = [];
   private _schemaProvider: SchemaProvider<Output> | undefined;
   private _cwd: string | undefined;
   private _existingSessionId: string | undefined;
@@ -347,11 +391,100 @@ export class ThinkBuilder<Output> {
   }
 
   /**
+   * Attach a skill to this prompt.
+   *
+   * When called with a string, it is treated as a path to a SKILL.md file
+   * that will be parsed at run() time (deferred stored skill).
+   *
+   * When called with an object, it is treated as a virtual skill definition
+   * and validated eagerly.
+   *
+   * @param pathOrDef - Path to a SKILL.md file, or a virtual skill definition
+   */
+  skill(pathOrDef: string | VirtualSkillDefinition): this {
+    if (typeof pathOrDef === "string") {
+      this._skills.push({ type: "stored", path: pathOrDef });
+    } else {
+      // Validate eagerly for virtual skills
+      validateSkillName(pathOrDef.name);
+      validateSkillDescription(pathOrDef.description);
+      this._skills.push({
+        type: "virtual",
+        skill: {
+          name: pathOrDef.name,
+          description: pathOrDef.description,
+          body: pathOrDef.body,
+          tools: pathOrDef.tools,
+        },
+      });
+    }
+    return this;
+  }
+
+  /**
    * Set the working directory for the session
    */
   cwd(path: string): this {
     this._cwd = path;
     return this;
+  }
+
+  /**
+   * Resolve all deferred skills into ResolvedSkill instances.
+   *
+   * - Virtual skills are passed through as-is.
+   * - Stored skills are loaded from disk: SKILL.md is parsed and basePath is
+   *   set to the directory containing the file.
+   *
+   * Skills are returned in attachment order.
+   */
+  private async _resolveSkills(): Promise<ResolvedSkill[]> {
+    const resolved: ResolvedSkill[] = [];
+
+    for (const deferred of this._skills) {
+      if (deferred.type === "virtual") {
+        resolved.push(deferred.skill);
+      } else {
+        const content = await readFile(deferred.path, "utf-8");
+        const parsed = parseSkillMd(content);
+        const stored: StoredSkill = {
+          name: parsed.name,
+          description: parsed.description,
+          body: parsed.body,
+          basePath: dirname(deferred.path),
+        };
+        resolved.push(stored);
+      }
+    }
+
+    return resolved;
+  }
+
+  /**
+   * Build the `<available_skills>` XML block and infrastructure instructions.
+   *
+   * Returns the string to prepend before the user's prompt parts, or an
+   * empty string when no skills are attached.
+   */
+  private _buildSkillsPrompt(skills: ResolvedSkill[]): string {
+    if (skills.length === 0) return "";
+
+    let xml = "<available_skills>\n";
+    for (const skill of skills) {
+      xml += `  <skill>\n`;
+      xml += `    <name>${skill.name}</name>\n`;
+      xml += `    <description>${skill.description}</description>\n`;
+      xml += `  </skill>\n`;
+    }
+    xml += "</available_skills>\n";
+
+    xml += "\n";
+    xml += "The above skills are available to you. When a task matches a skill's description,\n";
+    xml += "call the `activate_skill` tool with the skill name to load its full instructions.\n";
+    xml += "If the skill provides tools, use `call_skill_tool` to invoke them.\n";
+    xml += "If the skill references files, use `read_skill_file` to access them.\n";
+
+    return xml + "\n";
   }
 
   /**
@@ -392,8 +525,11 @@ export class ThinkBuilder<Output> {
       this._conn.initialized = true;
     }
 
-    // Build the prompt
-    let prompt = this._promptParts.join("");
+    // Resolve deferred skills
+    const resolvedSkills = await this._resolveSkills();
+
+    // Build the prompt: skills block first, then user prompt parts
+    let prompt = this._buildSkillsPrompt(resolvedSkills) + this._promptParts.join("");
 
     // Add tool references to the prompt
     const toolsWithPrompt = Array.from(this._tools.values()).filter(
@@ -447,8 +583,16 @@ export class ThinkBuilder<Output> {
 
     const server = serverBuilder.build();
 
-    // Register the MCP server
+    // Build skill MCP server if skills are present
+    const skillServer = resolvedSkills.length > 0
+      ? createSkillServer(resolvedSkills)
+      : undefined;
+
+    // Register the MCP server(s)
     this._conn.mcpHandler.register(server);
+    if (skillServer) {
+      this._conn.mcpHandler.register(skillServer);
+    }
     this._conn.mcpHandler.setSessionId(this._existingSessionId ?? "pending");
 
     try {
@@ -466,6 +610,15 @@ export class ThinkBuilder<Output> {
           url: server.acpUrl,
           headers: [],
         }];
+
+        if (skillServer) {
+          mcpServers.push({
+            type: "http" as const,
+            name: skillServer.name,
+            url: skillServer.acpUrl,
+            headers: [],
+          });
+        }
 
         const request: NewSessionRequest = {
           cwd: this._cwd ?? process.cwd(),
@@ -514,8 +667,11 @@ export class ThinkBuilder<Output> {
         this._conn.sessionHandlers.delete(sessionId);
       }
     } finally {
-      // Unregister MCP server
+      // Unregister MCP server(s)
       this._conn.mcpHandler.unregister(server);
+      if (skillServer) {
+        this._conn.mcpHandler.unregister(skillServer);
+      }
     }
   }
 }
