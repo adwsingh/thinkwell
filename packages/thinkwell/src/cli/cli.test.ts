@@ -63,6 +63,13 @@ function getBinaryPath(): string {
   return join(DIST_BIN_DIR, `thinkwell-${getPlatformTarget()}`);
 }
 
+// Strip ANSI escape codes from a string.
+// node --test can cause util.inspect to colorize values in child processes
+// even when stdout is piped and NO_COLOR is set.
+function stripAnsi(str: string): string {
+  return str.replace(/\x1b\[\d+m/g, "");
+}
+
 // Helper to run a command and capture output
 function run(
   command: string,
@@ -74,17 +81,17 @@ function run(
   try {
     const result = execSync([command, ...args].join(" "), {
       cwd,
-      env: { ...env, NO_COLOR: "1" },
+      env: { ...env, NO_COLOR: "1", FORCE_COLOR: "0", NODE_DISABLE_COLORS: "1" },
       timeout,
       encoding: "utf-8",
       stdio: ["pipe", "pipe", "pipe"],
     });
-    return { stdout: result, stderr: "", code: 0 };
+    return { stdout: stripAnsi(result), stderr: "", code: 0 };
   } catch (error: unknown) {
     const execError = error as { stdout?: string; stderr?: string; status?: number };
     return {
-      stdout: execError.stdout ?? "",
-      stderr: execError.stderr ?? "",
+      stdout: stripAnsi(execError.stdout ?? ""),
+      stderr: stripAnsi(execError.stderr ?? ""),
       code: execError.status ?? 1,
     };
   }
