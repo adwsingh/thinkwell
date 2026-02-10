@@ -15,7 +15,7 @@
 
 const { existsSync } = require("node:fs");
 const { resolve, isAbsolute } = require("node:path");
-const { styleText } = require('node:util');
+const { cyan, cyanBold, greenBold, whiteBold } = require("../../dist/cli/fmt.js");
 
 // Version must be updated manually to match package.json
 const VERSION = "0.4.5";
@@ -72,15 +72,6 @@ function registerBundledModules() {
 // ============================================================================
 // CLI Commands
 // ============================================================================
-
-function fmt(s) {
-  return (t) => styleText(s, t);
-}
-
-const cyan = fmt("cyan");
-const cyanBold = fmt(["cyan", "bold"]);
-const greenBold = fmt(["green", "bold"]);
-const whiteBold = fmt(["white", "bold"]);
 
 function showHelp() {
   console.log(`

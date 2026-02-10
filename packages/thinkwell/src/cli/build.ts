@@ -14,6 +14,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve, join, matchesGlob } from "node:path";
 import { styleText } from "node:util";
 import { createThinkwellProgram, createThinkwellWatchHost } from "./compiler-host.js";
+import { cyan, cyanBold, greenBold, whiteBold, dim } from "./fmt.js";
 
 // ============================================================================
 // Types
@@ -312,19 +313,19 @@ export function parseBuildArgs(args: string[]): BuildOptions {
 
 export function showBuildHelp(): void {
   console.log(`
-thinkwell build - Compile TypeScript with @JSONSchema transformation
+${cyanBold("thinkwell build")} - ${whiteBold("Compile TypeScript with @JSONSchema transformation")}
 
-Usage:
-  thinkwell build [options]
+${greenBold("Usage:")}
+  ${cyanBold("thinkwell build")} ${cyan("[options]")}
 
-Options:
-  -w, --watch            Watch for file changes and recompile
-  -p, --project <path>   Path to tsconfig.json (default: ./tsconfig.json)
-  -q, --quiet            Suppress all output except errors
-  --verbose              Show detailed build output
-  -h, --help             Show this help message
+${greenBold("Options:")}
+  ${cyan("-w, --watch")}            Watch for file changes and recompile
+  ${cyan("-p, --project")} ${dim("<path>")}   Path to tsconfig.json ${dim("(default: ./tsconfig.json)")}
+  ${cyan("-q, --quiet")}            Suppress all output except errors
+  ${cyan("--verbose")}              Show detailed build output
+  ${cyan("-h, --help")}             Show this help message
 
-Description:
+${greenBold("Description:")}
   Compiles your TypeScript project using the standard TypeScript compiler
   with a custom CompilerHost that applies @JSONSchema namespace injection
   in memory. Your source files are never modified.
@@ -332,13 +333,13 @@ Description:
   Output (.js, .d.ts, source maps) is written to the outDir configured
   in your tsconfig.json.
 
-Examples:
-  thinkwell build                        Build the project
-  thinkwell build --watch                Watch and rebuild on changes
-  thinkwell build -p tsconfig.app.json   Use a specific tsconfig
-  thinkwell build --quiet                Suppress success output (for CI)
+${greenBold("Examples:")}
+  ${cyanBold("thinkwell build")}                        Build the project
+  ${cyanBold("thinkwell build")} ${cyan("--watch")}                Watch and rebuild on changes
+  ${cyanBold("thinkwell build")} ${cyan("-p tsconfig.app.json")}   Use a specific tsconfig
+  ${cyanBold("thinkwell build")} ${cyan("--quiet")}                Suppress success output ${dim("(for CI)")}
 
-Configuration via package.json:
+${greenBold("Configuration via package.json:")}
   Control which files receive @JSONSchema transformation:
 
     {

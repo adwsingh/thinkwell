@@ -11,8 +11,8 @@
 import ts from "typescript";
 import { existsSync } from "node:fs";
 import { resolve, join } from "node:path";
-import { styleText } from "node:util";
 import { createThinkwellProgram } from "./compiler-host.js";
+import { cyan, cyanBold, greenBold, whiteBold, dim } from "./fmt.js";
 import { detectWorkspace, resolvePackageName } from "./workspace.js";
 import type { WorkspaceMember } from "./workspace.js";
 
@@ -277,36 +277,36 @@ export function parseCheckArgs(args: string[]): CheckOptions {
 
 export function showCheckHelp(): void {
   console.log(`
-thinkwell check - Type-check TypeScript with @JSONSchema support
+${cyanBold("thinkwell check")} - ${whiteBold("Type-check TypeScript with @JSONSchema support")}
 
-Usage:
-  thinkwell check [options]
+${greenBold("Usage:")}
+  ${cyanBold("thinkwell check")} ${cyan("[options]")}
 
-Options:
-  -p, --package <name>   Check a specific workspace package by name
-                          (can be specified multiple times)
-  --pretty               Enable colorized output (default: true if TTY)
-  --no-pretty            Disable colorized output
-  -h, --help             Show this help message
+${greenBold("Options:")}
+  ${cyan("-p, --package")} ${dim("<name>")}   Check a specific workspace package by name
+                          ${dim("(can be specified multiple times)")}
+  ${cyan("--pretty")}               Enable colorized output ${dim("(default: true if TTY)")}
+  ${cyan("--no-pretty")}            Disable colorized output
+  ${cyan("-h, --help")}             Show this help message
 
-Description:
+${greenBold("Description:")}
   Runs the TypeScript type checker on your project without producing
   output files. Uses a custom CompilerHost that applies @JSONSchema
   namespace injection in memory, so user scripts with @JSONSchema
   types are checked correctly.
 
   In a workspace (pnpm or npm), all TypeScript packages are checked.
-  Use --package to check specific packages by name.
+  Use ${cyan("--package")} to check specific packages by name.
 
-Exit codes:
-  0  No type errors
-  1  Type errors found
-  2  Configuration error
+${greenBold("Exit codes:")}
+  ${cyanBold("0")}  No type errors
+  ${cyanBold("1")}  Type errors found
+  ${cyanBold("2")}  Configuration error
 
-Examples:
-  thinkwell check                     Check the current project
-  thinkwell check -p acp              Check a specific workspace package
-  thinkwell check -p acp -p protocol  Check multiple packages
-  thinkwell check --no-pretty         Disable colorized output (for CI)
+${greenBold("Examples:")}
+  ${cyanBold("thinkwell check")}                     Check the current project
+  ${cyanBold("thinkwell check")} ${cyan("-p acp")}              Check a specific workspace package
+  ${cyanBold("thinkwell check")} ${cyan("-p acp -p protocol")}  Check multiple packages
+  ${cyanBold("thinkwell check")} ${cyan("--no-pretty")}         Disable colorized output ${dim("(for CI)")}
 `);
 }
