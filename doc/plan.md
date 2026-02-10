@@ -16,10 +16,10 @@ Implements the [node-ux](rfd/node-ux.md) and [check-command](rfd/check-command.m
 
 The shared infrastructure for both `thinkwell build` and `thinkwell check`.
 
-- [ ] Create `src/cli/compiler-host.ts` — custom `ts.CompilerHost` that wraps the default host and intercepts `getSourceFile()` to apply `transformJsonSchemas()` on project files
-- [ ] Handle the hybrid pattern: transform project source files, pass through `node_modules` / lib files unchanged
-- [ ] Add helper to read and parse user's `tsconfig.json` via `ts.readConfigFile()` + `ts.parseJsonConfigFileContent()`
-- [ ] Expose a `createThinkwellProgram(configPath)` function that returns a `ts.Program` wired to the custom host
+- [x] Create `src/cli/compiler-host.ts` — custom `ts.CompilerHost` that wraps the default host and intercepts `getSourceFile()` to apply `transformJsonSchemas()` on project files
+- [x] Handle the hybrid pattern: transform project source files, pass through `node_modules` / lib files unchanged
+- [x] Add helper to read and parse user's `tsconfig.json` via `ts.readConfigFile()` + `ts.parseJsonConfigFileContent()`
+- [x] Expose a `createThinkwellProgram(configPath)` function that returns a `ts.Program` wired to the custom host
 
 ## Phase 3: `thinkwell check` command
 
