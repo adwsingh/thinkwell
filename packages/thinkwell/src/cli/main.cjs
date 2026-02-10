@@ -89,7 +89,7 @@ ${cyanBold("thinkwell")} - ${whiteBold("agent scripting made easy 🖋️")}
 ${greenBold("Usage:")}
   ${cyanBold("thinkwell")} ${cyan("<script.ts> [args...]")}     Run a TypeScript script
   ${cyanBold("thinkwell run")} ${cyan("<script.ts> [args...]")} Explicit run command
-  ${cyanBold("thinkwell build")} ${cyan("<script.ts>")}         Compile to standalone executable
+  ${cyanBold("thinkwell bundle")} ${cyan("<script.ts>")}        Compile to standalone executable
   ${cyanBold("thinkwell")} ${cyan("--help")}                    Show this help message
   ${cyanBold("thinkwell")} ${cyan("--version")}                 Show version
 
@@ -117,7 +117,7 @@ async function runInitCommand(args) {
  * spawned directly from the snapshot filesystem. We extract it to a cache
  * directory and set ESBUILD_BINARY_PATH before loading esbuild.
  *
- * This MUST be called before requiring cli-build.cjs since esbuild is bundled
+ * This MUST be called before requiring cli-bundle.cjs since esbuild is bundled
  * into that module and initializes when the module loads.
  */
 function setupEsbuildForBuild(verbose) {
@@ -180,33 +180,33 @@ function setupEsbuildForBuild(verbose) {
 }
 
 /**
- * Run the build command to compile scripts into standalone executables.
+ * Run the bundle command to compile scripts into standalone executables.
  *
- * Uses the pre-bundled cli-build.cjs which handles esbuild setup for
+ * Uses the pre-bundled cli-bundle.cjs which handles esbuild setup for
  * compiled binary environments (extracting esbuild binary from pkg snapshot).
  */
-async function runBuildCommand(args) {
+async function runBundleCommand(args) {
   const verbose = args.includes("--verbose") || args.includes("-v");
 
-  // Set up esbuild binary BEFORE loading cli-build.cjs
-  // This is critical because esbuild is bundled into cli-build.cjs and
+  // Set up esbuild binary BEFORE loading cli-bundle.cjs
+  // This is critical because esbuild is bundled into cli-bundle.cjs and
   // initializes when the module is loaded.
   setupEsbuildForBuild(verbose);
 
   // Check for help flag
   if (args.includes("--help") || args.includes("-h")) {
-    const { showBuildHelp } = require("../../dist-pkg/cli-build.cjs");
-    showBuildHelp();
+    const { showBundleHelp } = require("../../dist-pkg/cli-bundle.cjs");
+    showBundleHelp();
     return;
   }
 
-  // Import and run the build command from pre-bundled CJS
-  // Path: src/cli/ -> ../../dist-pkg/cli-build.cjs
-  const { parseBuildArgs, runBuild } = require("../../dist-pkg/cli-build.cjs");
+  // Import and run the bundle command from pre-bundled CJS
+  // Path: src/cli/ -> ../../dist-pkg/cli-bundle.cjs
+  const { parseBundleArgs, runBundle } = require("../../dist-pkg/cli-bundle.cjs");
 
   try {
-    const options = parseBuildArgs(args);
-    await runBuild(options);
+    const options = parseBundleArgs(args);
+    await runBundle(options);
   } catch (error) {
     console.error(`Error: ${error.message}`);
     process.exit(1);
@@ -283,11 +283,21 @@ async function main() {
     process.exit(0);
   }
 
-  // Handle "build" subcommand
-  // Must come before global --help check so "build --help" works
-  if (args[0] === "build") {
-    await runBuildCommand(args.slice(1));
+  // Handle "bundle" subcommand
+  // Must come before global --help check so "bundle --help" works
+  if (args[0] === "bundle") {
+    await runBundleCommand(args.slice(1));
     process.exit(0);
+  }
+
+  // Handle "build" subcommand — reserved for future tsc-based build (node-ux RFD)
+  if (args[0] === "build") {
+    console.error('Error: "thinkwell build" has been renamed to "thinkwell bundle".');
+    console.error('');
+    console.error('  thinkwell bundle <script.ts>    Compile to standalone executable');
+    console.error('');
+    console.error('"thinkwell build" will be reclaimed for tsc-based builds in a future release.');
+    process.exit(1);
   }
 
   // Handle "types" subcommand - placeholder for Phase 5

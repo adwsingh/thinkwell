@@ -1,11 +1,11 @@
 /**
- * Tests for the thinkwell build command.
+ * Tests for the thinkwell bundle command.
  *
  * These tests cover:
- * - Argument parsing (parseBuildArgs)
+ * - Argument parsing (parseBundleArgs)
  * - Download/extraction logic with mocks
  * - Cache invalidation behavior
- * - E2E build from compiled binary (CI only)
+ * - E2E bundle from compiled binary (CI only)
  *
  * Skip these tests by setting: SKIP_BUILD_TESTS=1
  */
@@ -18,7 +18,7 @@ import { fileURLToPath } from "node:url";
 import { tmpdir, homedir } from "node:os";
 import { execSync } from "node:child_process";
 
-import { parseBuildArgs, type BuildOptions, type Target } from "./build.js";
+import { parseBundleArgs, type BundleOptions, type Target } from "./bundle.js";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PACKAGE_ROOT = resolve(__dirname, "../..");
@@ -49,7 +49,7 @@ const SKIP_BINARY = !existsSync(getBinaryPath());
 
 // Helper to create a temporary test directory
 function createTestDir(prefix: string): string {
-  const testDir = join(tmpdir(), `thinkwell-build-test-${prefix}-${Date.now()}`);
+  const testDir = join(tmpdir(), `thinkwell-bundle-test-${prefix}-${Date.now()}`);
   mkdirSync(testDir, { recursive: true });
   return testDir;
 }
@@ -94,31 +94,31 @@ function run(
 // Unit Tests: Argument Parsing
 // =============================================================================
 
-describe("build command argument parsing", { skip: SKIP_BUILD }, () => {
+describe("bundle command argument parsing", { skip: SKIP_BUILD }, () => {
   it("should parse entry file from positional argument", () => {
-    const options = parseBuildArgs(["src/agent.ts"]);
+    const options = parseBundleArgs(["src/agent.ts"]);
     assert.strictEqual(options.entry, "src/agent.ts");
     assert.deepStrictEqual(options.targets, ["host"]); // Default target
   });
 
   it("should parse --output flag", () => {
-    const options = parseBuildArgs(["src/agent.ts", "--output", "dist/my-agent"]);
+    const options = parseBundleArgs(["src/agent.ts", "--output", "dist/my-agent"]);
     assert.strictEqual(options.entry, "src/agent.ts");
     assert.strictEqual(options.output, "dist/my-agent");
   });
 
   it("should parse -o short flag", () => {
-    const options = parseBuildArgs(["src/agent.ts", "-o", "my-binary"]);
+    const options = parseBundleArgs(["src/agent.ts", "-o", "my-binary"]);
     assert.strictEqual(options.output, "my-binary");
   });
 
   it("should parse single --target flag", () => {
-    const options = parseBuildArgs(["src/agent.ts", "--target", "linux-x64"]);
+    const options = parseBundleArgs(["src/agent.ts", "--target", "linux-x64"]);
     assert.deepStrictEqual(options.targets, ["linux-x64"]);
   });
 
   it("should parse multiple --target flags", () => {
-    const options = parseBuildArgs([
+    const options = parseBundleArgs([
       "src/agent.ts",
       "-t", "darwin-arm64",
       "-t", "linux-x64",
@@ -128,7 +128,7 @@ describe("build command argument parsing", { skip: SKIP_BUILD }, () => {
   });
 
   it("should parse --include flag", () => {
-    const options = parseBuildArgs([
+    const options = parseBundleArgs([
       "src/agent.ts",
       "--include", "assets/**/*",
       "--include", "config.json",
@@ -137,37 +137,37 @@ describe("build command argument parsing", { skip: SKIP_BUILD }, () => {
   });
 
   it("should parse --verbose flag", () => {
-    const options = parseBuildArgs(["src/agent.ts", "--verbose"]);
+    const options = parseBundleArgs(["src/agent.ts", "--verbose"]);
     assert.strictEqual(options.verbose, true);
   });
 
   it("should parse -v short flag", () => {
-    const options = parseBuildArgs(["src/agent.ts", "-v"]);
+    const options = parseBundleArgs(["src/agent.ts", "-v"]);
     assert.strictEqual(options.verbose, true);
   });
 
   it("should parse --quiet flag", () => {
-    const options = parseBuildArgs(["src/agent.ts", "--quiet"]);
+    const options = parseBundleArgs(["src/agent.ts", "--quiet"]);
     assert.strictEqual(options.quiet, true);
   });
 
   it("should parse -q short flag", () => {
-    const options = parseBuildArgs(["src/agent.ts", "-q"]);
+    const options = parseBundleArgs(["src/agent.ts", "-q"]);
     assert.strictEqual(options.quiet, true);
   });
 
   it("should parse --dry-run flag", () => {
-    const options = parseBuildArgs(["src/agent.ts", "--dry-run"]);
+    const options = parseBundleArgs(["src/agent.ts", "--dry-run"]);
     assert.strictEqual(options.dryRun, true);
   });
 
   it("should parse -n short flag for dry-run", () => {
-    const options = parseBuildArgs(["src/agent.ts", "-n"]);
+    const options = parseBundleArgs(["src/agent.ts", "-n"]);
     assert.strictEqual(options.dryRun, true);
   });
 
   it("should parse --external flag", () => {
-    const options = parseBuildArgs([
+    const options = parseBundleArgs([
       "src/agent.ts",
       "--external", "sqlite3",
       "-e", "pg",
@@ -176,27 +176,27 @@ describe("build command argument parsing", { skip: SKIP_BUILD }, () => {
   });
 
   it("should parse --minify flag", () => {
-    const options = parseBuildArgs(["src/agent.ts", "--minify"]);
+    const options = parseBundleArgs(["src/agent.ts", "--minify"]);
     assert.strictEqual(options.minify, true);
   });
 
   it("should parse -m short flag for minify", () => {
-    const options = parseBuildArgs(["src/agent.ts", "-m"]);
+    const options = parseBundleArgs(["src/agent.ts", "-m"]);
     assert.strictEqual(options.minify, true);
   });
 
   it("should parse --watch flag", () => {
-    const options = parseBuildArgs(["src/agent.ts", "--watch"]);
+    const options = parseBundleArgs(["src/agent.ts", "--watch"]);
     assert.strictEqual(options.watch, true);
   });
 
   it("should parse -w short flag for watch", () => {
-    const options = parseBuildArgs(["src/agent.ts", "-w"]);
+    const options = parseBundleArgs(["src/agent.ts", "-w"]);
     assert.strictEqual(options.watch, true);
   });
 
   it("should parse complex combination of flags", () => {
-    const options = parseBuildArgs([
+    const options = parseBundleArgs([
       "src/agent.ts",
       "-o", "dist/agent",
       "-t", "darwin-arm64",
@@ -213,42 +213,42 @@ describe("build command argument parsing", { skip: SKIP_BUILD }, () => {
 
   it("should throw on missing entry file", () => {
     assert.throws(
-      () => parseBuildArgs([]),
+      () => parseBundleArgs([]),
       /No entry file specified/
     );
   });
 
   it("should throw on missing --output value", () => {
     assert.throws(
-      () => parseBuildArgs(["src/agent.ts", "--output"]),
+      () => parseBundleArgs(["src/agent.ts", "--output"]),
       /Missing value for --output/
     );
   });
 
   it("should throw on missing --target value", () => {
     assert.throws(
-      () => parseBuildArgs(["src/agent.ts", "--target"]),
+      () => parseBundleArgs(["src/agent.ts", "--target"]),
       /Missing value for --target/
     );
   });
 
   it("should throw on invalid target", () => {
     assert.throws(
-      () => parseBuildArgs(["src/agent.ts", "--target", "windows-x64"]),
+      () => parseBundleArgs(["src/agent.ts", "--target", "windows-x64"]),
       /Invalid target 'windows-x64'/
     );
   });
 
   it("should throw on unknown option", () => {
     assert.throws(
-      () => parseBuildArgs(["src/agent.ts", "--unknown"]),
+      () => parseBundleArgs(["src/agent.ts", "--unknown"]),
       /Unknown option: --unknown/
     );
   });
 
   it("should throw on unexpected positional argument", () => {
     assert.throws(
-      () => parseBuildArgs(["src/agent.ts", "extra-arg"]),
+      () => parseBundleArgs(["src/agent.ts", "extra-arg"]),
       /Unexpected argument: extra-arg/
     );
   });
@@ -256,7 +256,7 @@ describe("build command argument parsing", { skip: SKIP_BUILD }, () => {
   it("should validate all supported targets", () => {
     const validTargets: Target[] = ["darwin-arm64", "darwin-x64", "linux-x64", "linux-arm64", "host"];
     for (const target of validTargets) {
-      const options = parseBuildArgs(["src/agent.ts", "-t", target]);
+      const options = parseBundleArgs(["src/agent.ts", "-t", target]);
       assert.ok(options.targets?.includes(target), `Should accept target: ${target}`);
     }
   });
@@ -380,29 +380,29 @@ describe("cache invalidation logic", { skip: SKIP_BUILD }, () => {
 // Integration Tests: Build Command (npm distribution)
 // =============================================================================
 
-describe("build command integration (npm)", { skip: SKIP_BUILD }, () => {
+describe("bundle command integration (npm)", { skip: SKIP_BUILD }, () => {
   const NPM_BIN = resolve(PACKAGE_ROOT, "bin/thinkwell");
   let testDir: string;
 
   before(() => {
-    testDir = createTestDir("build-npm");
+    testDir = createTestDir("bundle-npm");
   });
 
   after(() => {
     cleanupTestDir(testDir);
   });
 
-  it("should show build help with --help flag", () => {
-    const result = run("node", [NPM_BIN, "build", "--help"]);
+  it("should show bundle help with --help flag", () => {
+    const result = run("node", [NPM_BIN, "bundle", "--help"]);
     assert.strictEqual(result.code, 0, `Exit code should be 0: ${result.stderr}`);
-    assert.ok(result.stdout.includes("thinkwell build"), "Should show build command");
+    assert.ok(result.stdout.includes("thinkwell bundle"), "Should show bundle command");
     assert.ok(result.stdout.includes("--output"), "Should show --output flag");
     assert.ok(result.stdout.includes("--target"), "Should show --target flag");
     assert.ok(result.stdout.includes("--dry-run"), "Should show --dry-run flag");
   });
 
   it("should error when no entry file specified", () => {
-    const result = run("node", [NPM_BIN, "build"]);
+    const result = run("node", [NPM_BIN, "bundle"]);
     assert.notStrictEqual(result.code, 0, "Should fail without entry file");
     assert.ok(
       result.stderr.includes("No entry file") || result.stderr.includes("entry"),
@@ -411,7 +411,7 @@ describe("build command integration (npm)", { skip: SKIP_BUILD }, () => {
   });
 
   it("should error on non-existent entry file", () => {
-    const result = run("node", [NPM_BIN, "build", "nonexistent.ts"]);
+    const result = run("node", [NPM_BIN, "bundle", "nonexistent.ts"]);
     assert.notStrictEqual(result.code, 0, "Should fail for non-existent file");
     assert.ok(
       result.stderr.includes("not found") || result.stderr.includes("Entry file"),
@@ -424,7 +424,7 @@ describe("build command integration (npm)", { skip: SKIP_BUILD }, () => {
     const scriptPath = join(testDir, "simple.ts");
     writeFileSync(scriptPath, 'console.log("hello");');
 
-    const result = run("node", [NPM_BIN, "build", scriptPath, "--dry-run"]);
+    const result = run("node", [NPM_BIN, "bundle", scriptPath, "--dry-run"]);
     assert.strictEqual(result.code, 0, `Exit code should be 0: ${result.stderr}`);
     assert.ok(result.stdout.includes("Dry run mode"), "Should indicate dry run");
     assert.ok(result.stdout.includes("Entry point:"), "Should show entry point");
@@ -439,7 +439,7 @@ const response = await fetch("https://example.com");
 console.log(response.status);
 `);
 
-    const result = run("node", [NPM_BIN, "build", scriptPath, "--dry-run"]);
+    const result = run("node", [NPM_BIN, "bundle", scriptPath, "--dry-run"]);
     assert.strictEqual(result.code, 0, `Exit code should be 0: ${result.stderr}`);
     assert.ok(
       result.stdout.includes("Top-level await") || result.stdout.includes("top-level await"),
@@ -447,7 +447,7 @@ console.log(response.status);
     );
   });
 
-  it("should build a simple script successfully", () => {
+  it("should bundle a simple script successfully", () => {
     const scriptPath = join(testDir, "buildable.ts");
     writeFileSync(scriptPath, `
 const msg: string = "Built successfully!";
@@ -455,8 +455,8 @@ console.log(msg);
 `);
 
     const outputPath = join(testDir, "buildable-out");
-    const result = run("node", [NPM_BIN, "build", scriptPath, "-o", outputPath, "-q"], {
-      timeout: 180000, // 3 minutes for build
+    const result = run("node", [NPM_BIN, "bundle", scriptPath, "-o", outputPath, "-q"], {
+      timeout: 180000, // 3 minutes for bundle
     });
 
     assert.strictEqual(result.code, 0, `Build failed: ${result.stderr}`);
@@ -477,7 +477,7 @@ console.log(msg);
 // E2E Tests: Build from Compiled Binary (CI Only)
 // =============================================================================
 
-describe("build command E2E (compiled binary)", {
+describe("bundle command E2E (compiled binary)", {
   skip: SKIP_BUILD || SKIP_BINARY || !process.env.CI
 }, () => {
   const binaryPath = getBinaryPath();
@@ -485,7 +485,7 @@ describe("build command E2E (compiled binary)", {
   let cacheDir: string;
 
   before(() => {
-    testDir = createTestDir("build-binary-e2e");
+    testDir = createTestDir("bundle-binary-e2e");
     cacheDir = join(testDir, "cache");
     // Use isolated cache for E2E tests
     process.env.THINKWELL_CACHE_DIR = cacheDir;
@@ -496,22 +496,22 @@ describe("build command E2E (compiled binary)", {
     delete process.env.THINKWELL_CACHE_DIR;
   });
 
-  it("should show build help from compiled binary", () => {
-    const result = run(binaryPath, ["build", "--help"]);
+  it("should show bundle help from compiled binary", () => {
+    const result = run(binaryPath, ["bundle", "--help"]);
     assert.strictEqual(result.code, 0, `Exit code should be 0: ${result.stderr}`);
-    assert.ok(result.stdout.includes("thinkwell build"), "Should show build command");
+    assert.ok(result.stdout.includes("thinkwell bundle"), "Should show bundle command");
   });
 
   it("should run dry-run from compiled binary", () => {
     const scriptPath = join(testDir, "e2e-simple.ts");
     writeFileSync(scriptPath, 'console.log("e2e");');
 
-    const result = run(binaryPath, ["build", scriptPath, "--dry-run"]);
+    const result = run(binaryPath, ["bundle", scriptPath, "--dry-run"]);
     assert.strictEqual(result.code, 0, `Exit code should be 0: ${result.stderr}`);
     assert.ok(result.stdout.includes("Dry run mode"), "Should indicate dry run");
   });
 
-  it("should build a script from compiled binary (full E2E)", () => {
+  it("should bundle a script from compiled binary (full E2E)", () => {
     const scriptPath = join(testDir, "e2e-buildable.ts");
     writeFileSync(scriptPath, `
 import { open } from "thinkwell";
@@ -519,7 +519,7 @@ console.log("open imported:", typeof open);
 `);
 
     const outputPath = join(testDir, "e2e-output");
-    const result = run(binaryPath, ["build", scriptPath, "-o", outputPath], {
+    const result = run(binaryPath, ["bundle", scriptPath, "-o", outputPath], {
       timeout: 300000, // 5 minutes for full build including Node.js download
       env: {
         ...process.env,
@@ -545,7 +545,7 @@ console.log("open imported:", typeof open);
     writeFileSync(script1Path, 'console.log("cache test 1");');
 
     const output1Path = join(testDir, "e2e-cache1-out");
-    const result1 = run(binaryPath, ["build", script1Path, "-o", output1Path], {
+    const result1 = run(binaryPath, ["bundle", script1Path, "-o", output1Path], {
       timeout: 300000,
       env: {
         ...process.env,
@@ -559,7 +559,7 @@ console.log("open imported:", typeof open);
     writeFileSync(script2Path, 'console.log("cache test 2");');
 
     const output2Path = join(testDir, "e2e-cache2-out");
-    const result2 = run(binaryPath, ["build", script2Path, "-o", output2Path], {
+    const result2 = run(binaryPath, ["bundle", script2Path, "-o", output2Path], {
       timeout: 120000, // Should be faster without download
       env: {
         ...process.env,
@@ -597,7 +597,7 @@ const data = await fetch("https://example.com");
 console.log(data);
 `);
 
-    const result = run("node", [NPM_BIN, "build", scriptPath, "--dry-run"]);
+    const result = run("node", [NPM_BIN, "bundle", scriptPath, "--dry-run"]);
     assert.ok(
       result.stdout.includes("Top-level await") ||
       result.stdout.includes("top-level await"),
@@ -616,7 +616,7 @@ async function main() {
 main();
 `);
 
-    const result = run("node", [NPM_BIN, "build", scriptPath, "--dry-run"]);
+    const result = run("node", [NPM_BIN, "bundle", scriptPath, "--dry-run"]);
     // Should NOT have the warning
     assert.ok(
       !result.stdout.includes("Top-level await detected"),
@@ -635,7 +635,7 @@ const main = async () => {
 main();
 `);
 
-    const result = run("node", [NPM_BIN, "build", scriptPath, "--dry-run"]);
+    const result = run("node", [NPM_BIN, "bundle", scriptPath, "--dry-run"]);
     assert.ok(
       !result.stdout.includes("Top-level await detected"),
       "Should not flag await inside arrow function"
@@ -651,7 +651,7 @@ main();
 console.log("no actual await here");
 `);
 
-    const result = run("node", [NPM_BIN, "build", scriptPath, "--dry-run"]);
+    const result = run("node", [NPM_BIN, "bundle", scriptPath, "--dry-run"]);
     assert.ok(
       !result.stdout.includes("Top-level await detected"),
       "Should not flag await in comments"
@@ -666,7 +666,7 @@ const msg = "we await your response";
 console.log(msg);
 `);
 
-    const result = run("node", [NPM_BIN, "build", scriptPath, "--dry-run"]);
+    const result = run("node", [NPM_BIN, "bundle", scriptPath, "--dry-run"]);
     assert.ok(
       !result.stdout.includes("Top-level await detected"),
       "Should not flag await in strings"

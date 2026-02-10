@@ -14,7 +14,7 @@
  *   dist-pkg/acp.cjs            - bundled @thinkwell/acp package
  *   dist-pkg/protocol.cjs       - bundled @thinkwell/protocol package
  *   dist-pkg/cli-loader.cjs     - bundled CLI loader (includes schema processing)
- *   dist-pkg/cli-build.cjs      - bundled build command
+ *   dist-pkg/cli-bundle.cjs     - bundled bundle command
  *   dist-pkg/pkg-cli.cjs        - bundled @yao-pkg/pkg CLI for subprocess execution
  *   dist-pkg/esbuild-bin/       - esbuild binaries for each platform
  */
@@ -62,9 +62,9 @@ const PACKAGES: PackageConfig[] = [
     output: "cli-loader.cjs",
   },
   {
-    name: "cli-build",
-    entryPoint: resolve(ROOT_DIR, "dist/cli/build.js"),
-    output: "cli-build.cjs",
+    name: "cli-bundle",
+    entryPoint: resolve(ROOT_DIR, "dist/cli/bundle.js"),
+    output: "cli-bundle.cjs",
     // NOTE: esbuild is NOT marked as external - we bundle its JS code, but its native binary
     // is extracted separately via extractEsbuildBinary() and ESBUILD_BINARY_PATH
     // @yao-pkg/pkg is external because it's only used at build time (not inside the compiled binary)

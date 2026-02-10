@@ -1,10 +1,10 @@
 /**
- * Build command for creating self-contained executables from user scripts.
+ * Bundle command for creating self-contained executables from user scripts.
  *
- * This module provides the `thinkwell build` command that compiles user scripts
+ * This module provides the `thinkwell bundle` command that compiles user scripts
  * into standalone binaries using the same pkg-based tooling as the thinkwell CLI.
  *
- * The build process follows a two-stage pipeline:
+ * The bundle process follows a two-stage pipeline:
  * 1. **Pre-bundle with esbuild** - Bundle user script + thinkwell packages into CJS
  * 2. **Compile with pkg** - Create self-contained binary with Node.js runtime
  */
@@ -176,7 +176,7 @@ function detectHostTarget(): Exclude<Target, "host"> {
   );
 }
 
-export interface BuildOptions {
+export interface BundleOptions {
   /** Entry point TypeScript/JavaScript file */
   entry: string;
   /** Output file path (default: ./<entry-basename>-<target>) */
@@ -200,9 +200,9 @@ export interface BuildOptions {
 }
 
 /**
- * Configuration that can be specified in package.json under "thinkwell.build".
+ * Configuration that can be specified in package.json under "thinkwell.bundle".
  */
-export interface PackageJsonBuildConfig {
+export interface PackageJsonBundleConfig {
   /** Default output path */
   output?: string;
   /** Default target platforms */
@@ -219,7 +219,7 @@ export interface PackageJsonBuildConfig {
  * Read build configuration from package.json in the given directory.
  * Returns undefined if no configuration is found.
  */
-function readPackageJsonConfig(dir: string): PackageJsonBuildConfig | undefined {
+function readPackageJsonConfig(dir: string): PackageJsonBundleConfig | undefined {
   const pkgPath = join(dir, "package.json");
   if (!existsSync(pkgPath)) {
     return undefined;
@@ -229,14 +229,14 @@ function readPackageJsonConfig(dir: string): PackageJsonBuildConfig | undefined 
     const content = readFileSync(pkgPath, "utf-8");
     const pkg = JSON.parse(content);
 
-    // Look for "thinkwell.build" configuration
-    const config = pkg?.thinkwell?.build;
+    // Look for "thinkwell.bundle" configuration
+    const config = pkg?.thinkwell?.bundle;
     if (!config || typeof config !== "object") {
       return undefined;
     }
 
     // Validate and extract configuration
-    const result: PackageJsonBuildConfig = {};
+    const result: PackageJsonBundleConfig = {};
 
     if (typeof config.output === "string") {
       result.output = config.output;
@@ -272,7 +272,7 @@ function readPackageJsonConfig(dir: string): PackageJsonBuildConfig | undefined 
  * Merge package.json configuration with CLI options.
  * CLI options take precedence over package.json configuration.
  */
-function mergeWithPackageConfig(options: BuildOptions, entryDir: string): BuildOptions {
+function mergeWithPackageConfig(options: BundleOptions, entryDir: string): BundleOptions {
   const pkgConfig = readPackageJsonConfig(entryDir);
   if (!pkgConfig) {
     return options;
@@ -297,7 +297,7 @@ function mergeWithPackageConfig(options: BuildOptions, entryDir: string): BuildO
   };
 }
 
-interface BuildContext {
+interface BundleContext {
   /** Absolute path to the entry file */
   entryPath: string;
   /** Base name of the entry file (without extension) */
@@ -311,14 +311,14 @@ interface BuildContext {
   /** Resolved targets (no "host") */
   resolvedTargets: Exclude<Target, "host">[];
   /** Build options */
-  options: BuildOptions;
+  options: BundleOptions;
 }
 
 /**
  * Parse and validate build options from command-line arguments.
  */
-export function parseBuildArgs(args: string[]): BuildOptions {
-  const options: BuildOptions = {
+export function parseBundleArgs(args: string[]): BundleOptions {
+  const options: BundleOptions = {
     entry: "",
     targets: [],
     include: [],
@@ -398,7 +398,7 @@ export function parseBuildArgs(args: string[]): BuildOptions {
 /**
  * Initialize the build context with resolved paths and validated inputs.
  */
-function initBuildContext(options: BuildOptions): BuildContext {
+function initBundleContext(options: BundleOptions): BundleContext {
   // Resolve entry path
   const entryPath = isAbsolute(options.entry)
     ? options.entry
@@ -425,7 +425,7 @@ function initBuildContext(options: BuildOptions): BuildContext {
   }
 
   // Create build directory in system temp directory using mkdtempSync for atomicity
-  const buildDir = mkdtempSync(join(tmpdir(), `thinkwell-build-${entryBasename}-`));
+  const buildDir = mkdtempSync(join(tmpdir(), `thinkwell-bundle-${entryBasename}-`));
 
   // Find the thinkwell dist-pkg directory
   // When running from npm install: node_modules/thinkwell/dist-pkg
@@ -461,7 +461,7 @@ function initBuildContext(options: BuildOptions): BuildContext {
 /**
  * Generate the output path for a given target.
  */
-function getOutputPath(ctx: BuildContext, target: Exclude<Target, "host">): string {
+function getOutputPath(ctx: BundleContext, target: Exclude<Target, "host">): string {
   if (ctx.options.output) {
     if (ctx.resolvedTargets.length === 1) {
       // Single target: use exact output path
@@ -492,7 +492,7 @@ function getOutputPath(ctx: BuildContext, target: Exclude<Target, "host">): stri
 function generateWrapperSource(userBundlePath: string): string {
   return `#!/usr/bin/env node
 /**
- * Generated wrapper for thinkwell build.
+ * Generated wrapper for thinkwell bundle.
  * This file is auto-generated - do not edit.
  */
 
@@ -519,7 +519,7 @@ require('./${basename(userBundlePath)}');
  * into a single CJS file. The thinkwell packages are marked as external
  * since they'll be provided via global.__bundled__.
  */
-async function bundleUserScript(ctx: BuildContext): Promise<string> {
+async function bundleUserScript(ctx: BundleContext): Promise<string> {
   const outputFile = join(ctx.buildDir, `${ctx.entryBasename}-bundle.cjs`);
 
   if (ctx.options.verbose) {
@@ -641,7 +641,7 @@ require.main = __origRequire.main;
 /**
  * Copy thinkwell pre-bundled packages to build directory.
  */
-function copyThinkwellBundles(ctx: BuildContext): void {
+function copyThinkwellBundles(ctx: BundleContext): void {
   const bundles = ["thinkwell.cjs", "acp.cjs", "protocol.cjs"];
 
   for (const bundle of bundles) {
@@ -1015,7 +1015,7 @@ function spawnAsync(
  * to perform the compilation as a subprocess.
  */
 async function compileWithPkgSubprocess(
-  ctx: BuildContext,
+  ctx: BundleContext,
   wrapperPath: string,
   target: Exclude<Target, "host">,
   outputPath: string,
@@ -1090,7 +1090,7 @@ async function compileWithPkgSubprocess(
  * When running from npm/source, this function uses @yao-pkg/pkg programmatically.
  */
 async function compileWithPkg(
-  ctx: BuildContext,
+  ctx: BundleContext,
   wrapperPath: string,
   target: Exclude<Target, "host">,
   outputPath: string,
@@ -1218,14 +1218,14 @@ function detectTopLevelAwait(filePath: string): number[] {
 // ============================================================================
 
 /** Log output respecting quiet mode */
-function log(ctx: BuildContext, message: string): void {
+function log(ctx: BundleContext, message: string): void {
   if (!ctx.options.quiet) {
     console.log(message);
   }
 }
 
 /** Create a spinner respecting quiet mode */
-function createSpinner(ctx: BuildContext, text: string): Spinner {
+function createSpinner(ctx: BundleContext, text: string): Spinner {
   return createSpinnerImpl({
     text,
     isSilent: ctx.options.quiet,
@@ -1235,7 +1235,7 @@ function createSpinner(ctx: BuildContext, text: string): Spinner {
 /**
  * Run a dry-run build that shows what would be built without actually building.
  */
-function runDryRun(ctx: BuildContext): void {
+function runDryRun(ctx: BundleContext): void {
   console.log(styleText("bold", "Dry run mode - no files will be created\n"));
 
   console.log(styleText("bold", "Entry point:"));
@@ -1291,14 +1291,14 @@ function runDryRun(ctx: BuildContext): void {
 /**
  * Main build function.
  */
-export async function runBuild(options: BuildOptions): Promise<void> {
+export async function runBundle(options: BundleOptions): Promise<void> {
   // Handle watch mode separately
   if (options.watch) {
     await runWatchMode(options);
     return;
   }
 
-  const ctx = initBuildContext(options);
+  const ctx = initBundleContext(options);
 
   // Check for top-level await and warn
   const topLevelAwaits = detectTopLevelAwait(ctx.entryPath);
@@ -1386,8 +1386,8 @@ export async function runBuild(options: BuildOptions): Promise<void> {
 /**
  * Run the build in watch mode, rebuilding on file changes.
  */
-async function runWatchMode(options: BuildOptions): Promise<void> {
-  const ctx = initBuildContext(options);
+async function runWatchMode(options: BundleOptions): Promise<void> {
+  const ctx = initBundleContext(options);
 
   console.log(styleText("bold", `Watching ${ctx.entryBasename} for changes...`));
   console.log(styleText("dim", "Press Ctrl+C to stop.\n"));
@@ -1414,7 +1414,7 @@ async function runWatchMode(options: BuildOptions): Promise<void> {
 
     try {
       // Re-initialize context to pick up any config changes
-      const freshCtx = initBuildContext(options);
+      const freshCtx = initBundleContext(options);
 
       // Create build directory
       if (existsSync(freshCtx.buildDir)) {
@@ -1529,12 +1529,12 @@ async function runWatchMode(options: BuildOptions): Promise<void> {
 /**
  * Show help for the build command.
  */
-export function showBuildHelp(): void {
+export function showBundleHelp(): void {
   console.log(`
-thinkwell build - Compile TypeScript scripts into standalone executables
+thinkwell bundle - Compile TypeScript scripts into standalone executables
 
 Usage:
-  thinkwell build [options] <entry>
+  thinkwell bundle [options] <entry>
 
 Arguments:
   entry                  TypeScript or JavaScript entry point
@@ -1559,14 +1559,14 @@ Targets:
   linux-arm64            Linux on ARM64
 
 Examples:
-  thinkwell build src/agent.ts                     Build for current platform
-  thinkwell build src/agent.ts -o dist/my-agent    Specify output path
-  thinkwell build src/agent.ts --target linux-x64  Build for Linux
-  thinkwell build src/agent.ts -t darwin-arm64 -t linux-x64  Multi-platform
-  thinkwell build src/agent.ts --dry-run           Preview build without executing
-  thinkwell build src/agent.ts -e sqlite3          Keep sqlite3 as external
-  thinkwell build src/agent.ts --minify            Minify for smaller binary
-  thinkwell build src/agent.ts --watch             Rebuild on file changes
+  thinkwell bundle src/agent.ts                     Bundle for current platform
+  thinkwell bundle src/agent.ts -o dist/my-agent    Specify output path
+  thinkwell bundle src/agent.ts --target linux-x64  Bundle for Linux
+  thinkwell bundle src/agent.ts -t darwin-arm64 -t linux-x64  Multi-platform
+  thinkwell bundle src/agent.ts --dry-run           Preview bundle without executing
+  thinkwell bundle src/agent.ts -e sqlite3          Keep sqlite3 as external
+  thinkwell bundle src/agent.ts --minify            Minify for smaller binary
+  thinkwell bundle src/agent.ts --watch             Rebuild on file changes
 
 The resulting binary is self-contained and includes:
   - Node.js 24 runtime with TypeScript support
@@ -1578,7 +1578,7 @@ Configuration via package.json:
 
     {
       "thinkwell": {
-        "build": {
+        "bundle": {
           "output": "dist/my-agent",
           "targets": ["darwin-arm64", "linux-x64"],
           "external": ["sqlite3"],

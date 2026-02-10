@@ -10,7 +10,7 @@
  * 2. Extracted to disk at runtime
  * 3. Executed via a subprocess using a downloaded portable Node.js
  *
- * This approach allows `thinkwell build` to work from compiled binaries without
+ * This approach allows `thinkwell bundle` to work from compiled binaries without
  * requiring npm, npx, or any external dependencies.
  *
  * Output:
