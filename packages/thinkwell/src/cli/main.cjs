@@ -89,6 +89,7 @@ ${cyanBold("thinkwell")} - ${whiteBold("agent scripting made easy 🖋️")}
 ${greenBold("Usage:")}
   ${cyanBold("thinkwell")} ${cyan("<script.ts> [args...]")}     Run a TypeScript script
   ${cyanBold("thinkwell run")} ${cyan("<script.ts> [args...]")} Explicit run command
+  ${cyanBold("thinkwell build")}                         Compile project with @JSONSchema support
   ${cyanBold("thinkwell bundle")} ${cyan("<script.ts>")}        Compile to standalone executable
   ${cyanBold("thinkwell")} ${cyan("--help")}                    Show this help message
   ${cyanBold("thinkwell")} ${cyan("--version")}                 Show version
@@ -108,6 +109,30 @@ async function runInitCommand(args) {
   // Path: src/cli/ -> ../../dist/cli/init-command.js
   const { runInit } = require("../../dist/cli/init-command.js");
   await runInit(args);
+}
+
+/**
+ * Run the build command (tsc-based compilation with @JSONSchema transformation).
+ */
+async function runBuildCommand(args) {
+  // Check for help flag
+  if (args.includes("--help") || args.includes("-h")) {
+    const { showBuildHelp } = require("../../dist/cli/build.js");
+    showBuildHelp();
+    return;
+  }
+
+  // Import and run the build command
+  // Path: src/cli/ -> ../../dist/cli/build.js
+  const { parseBuildArgs, runBuild } = require("../../dist/cli/build.js");
+
+  try {
+    const options = parseBuildArgs(args);
+    await runBuild(options);
+  } catch (error) {
+    console.error(`Error: ${error.message}`);
+    process.exit(1);
+  }
 }
 
 /**
@@ -290,14 +315,10 @@ async function main() {
     process.exit(0);
   }
 
-  // Handle "build" subcommand — reserved for future tsc-based build (node-ux RFD)
+  // Handle "build" subcommand — tsc-based build with @JSONSchema transformation
   if (args[0] === "build") {
-    console.error('Error: "thinkwell build" has been renamed to "thinkwell bundle".');
-    console.error('');
-    console.error('  thinkwell bundle <script.ts>    Compile to standalone executable');
-    console.error('');
-    console.error('"thinkwell build" will be reclaimed for tsc-based builds in a future release.');
-    process.exit(1);
+    await runBuildCommand(args.slice(1));
+    process.exit(0);
   }
 
   // Handle "types" subcommand - placeholder for Phase 5

@@ -71,31 +71,66 @@ function shouldTransform(fileName: string): boolean {
 }
 
 /**
+ * Options for creating a custom CompilerHost.
+ */
+export interface ThinkwellHostOptions {
+  /** TypeScript compiler options (used to create the default host) */
+  compilerOptions: ts.CompilerOptions;
+  /**
+   * Optional additional filter for controlling which files receive @JSONSchema
+   * transformation. Called only for project files (node_modules and lib files
+   * are always excluded). Return true to allow transformation.
+   */
+  fileFilter?: (fileName: string) => boolean;
+}
+
+function isThinkwellHostOptions(options: ts.CompilerOptions | ThinkwellHostOptions): options is ThinkwellHostOptions {
+  return typeof (options as ThinkwellHostOptions).compilerOptions === "object"
+    && (options as ThinkwellHostOptions).compilerOptions !== null
+    && !Array.isArray((options as ThinkwellHostOptions).compilerOptions);
+}
+
+/**
  * Create a custom CompilerHost that applies @JSONSchema transformation.
  *
  * The host wraps the default TypeScript CompilerHost and intercepts
  * `getSourceFile()` to apply `transformJsonSchemas()` on project files.
  * All other methods delegate to the default host.
  *
- * @param options - TypeScript compiler options (used to create the default host)
+ * @param options - TypeScript compiler options, or a ThinkwellHostOptions object
  * @returns A CompilerHost that applies @JSONSchema transformations in memory
  */
-export function createThinkwellHost(options: ts.CompilerOptions): ts.CompilerHost {
-  const defaultHost = ts.createCompilerHost(options);
+export function createThinkwellHost(options: ts.CompilerOptions): ts.CompilerHost;
+export function createThinkwellHost(options: ThinkwellHostOptions): ts.CompilerHost;
+export function createThinkwellHost(options: ts.CompilerOptions | ThinkwellHostOptions): ts.CompilerHost {
+  let compilerOptions: ts.CompilerOptions;
+  let fileFilter: ((fileName: string) => boolean) | undefined;
+
+  if (isThinkwellHostOptions(options)) {
+    compilerOptions = options.compilerOptions;
+    fileFilter = options.fileFilter;
+  } else {
+    compilerOptions = options;
+    fileFilter = undefined;
+  }
+  const defaultHost = ts.createCompilerHost(compilerOptions);
 
   return {
     ...defaultHost,
 
-    getSourceFile(fileName, languageVersionOrOptions, onError, shouldCreateNewSourceFile) {
+    getSourceFile(fileName, languageVersionOrOptions) {
       const source = ts.sys.readFile(fileName);
       if (source === undefined) {
         return undefined;
       }
 
-      // Only transform project source files that contain @JSONSchema markers
+      // Only transform project source files that contain @JSONSchema markers.
+      // If a fileFilter is provided, also check that the file passes the filter.
       if (shouldTransform(fileName) && hasJsonSchemaMarkers(source)) {
-        const transformed = transformJsonSchemas(fileName, source);
-        return ts.createSourceFile(fileName, transformed, languageVersionOrOptions);
+        if (!fileFilter || fileFilter(fileName)) {
+          const transformed = transformJsonSchemas(fileName, source);
+          return ts.createSourceFile(fileName, transformed, languageVersionOrOptions);
+        }
       }
 
       // Pass through unchanged
@@ -105,21 +140,47 @@ export function createThinkwellHost(options: ts.CompilerOptions): ts.CompilerHos
 }
 
 /**
+ * Options for creating a Thinkwell-aware TypeScript program.
+ */
+export interface CreateProgramOptions {
+  /** Absolute path to the project's tsconfig.json */
+  configPath: string;
+  /**
+   * Optional filter for controlling which files receive @JSONSchema
+   * transformation. See {@link ThinkwellHostOptions.fileFilter}.
+   */
+  fileFilter?: (fileName: string) => boolean;
+}
+
+/**
  * Create a TypeScript Program wired to the custom CompilerHost.
  *
  * This is the main entry point for both `thinkwell build` and `thinkwell check`.
  * The returned program can be used with `ts.getPreEmitDiagnostics()` for type
  * checking or `program.emit()` for producing output files.
  *
- * @param configPath - Absolute path to the project's tsconfig.json
+ * @param configPathOrOptions - Absolute path to tsconfig.json, or a CreateProgramOptions object
  * @returns The ts.Program and any config-level diagnostics, or null with errors
  */
-export function createThinkwellProgram(configPath: string): {
+export function createThinkwellProgram(configPathOrOptions: string | CreateProgramOptions): {
   program: ts.Program;
   configErrors: readonly ts.Diagnostic[];
 } {
+  const configPath = typeof configPathOrOptions === "string"
+    ? configPathOrOptions
+    : configPathOrOptions.configPath;
+  const fileFilter = typeof configPathOrOptions === "object"
+    ? configPathOrOptions.fileFilter
+    : undefined;
+
   const resolvedConfigPath = resolve(configPath);
   const { options, fileNames, errors } = parseTsConfig(resolvedConfigPath);
+
+  function makeHost() {
+    return fileFilter
+      ? createThinkwellHost({ compilerOptions: options, fileFilter })
+      : createThinkwellHost(options);
+  }
 
   // If there are fatal config errors, still return them so callers can report
   if (errors.length > 0) {
@@ -129,13 +190,13 @@ export function createThinkwellProgram(configPath: string): {
     );
     if (fatalErrors.length > 0) {
       // Create a minimal program so callers have a consistent interface
-      const host = createThinkwellHost(options);
+      const host = makeHost();
       const program = ts.createProgram([], options, host);
       return { program, configErrors: errors };
     }
   }
 
-  const host = createThinkwellHost(options);
+  const host = makeHost();
   const program = ts.createProgram(fileNames, options, host);
 
   return { program, configErrors: errors };

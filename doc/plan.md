@@ -25,10 +25,10 @@ The shared infrastructure for both `thinkwell build` and `thinkwell check`.
 
 ## Phase 3: `thinkwell build` command (tsc-based)
 
-- [ ] Create `src/cli/build.ts` (the new build, reclaiming the name) with `runBuild()`, `parseBuildArgs()`, `showBuildHelp()`
-- [ ] Implement: resolve `tsconfig.json`, create program via CompilerHost, call `program.emit()`, report diagnostics
-- [ ] Support `thinkwell.build` config in package.json (`include`/`exclude` globs for controlling which files receive `@JSONSchema` processing)
-- [ ] Update `main.cjs` to route `"build"` to the new tsc-based build
+- [x] Create `src/cli/build.ts` (the new build, reclaiming the name) with `runBuild()`, `parseBuildArgs()`, `showBuildHelp()`
+- [x] Implement: resolve `tsconfig.json`, create program via CompilerHost, call `program.emit()`, report diagnostics
+- [x] Support `thinkwell.build` config in package.json (`include`/`exclude` globs for controlling which files receive `@JSONSchema` processing)
+- [x] Update `main.cjs` to route `"build"` to the new tsc-based build
 
 ## Phase 4: Watch mode
 

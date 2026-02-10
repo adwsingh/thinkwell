@@ -1,0 +1,303 @@
+/**
+ * Build command for tsc-based compilation with @JSONSchema transformation.
+ *
+ * This module provides the `thinkwell build` command that compiles a TypeScript
+ * project using the standard TypeScript compiler API with a custom CompilerHost.
+ * The CompilerHost intercepts file reads and applies @JSONSchema namespace
+ * injection in memory, so user source files are never modified on disk.
+ *
+ * Output (.js, .d.ts, source maps) is written to the project's configured outDir.
+ */
+
+import ts from "typescript";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve, join, matchesGlob } from "node:path";
+import { styleText } from "node:util";
+import { createThinkwellProgram } from "./compiler-host.js";
+
+// ============================================================================
+// Types
+// ============================================================================
+
+export interface BuildOptions {
+  /** Path to tsconfig.json (default: ./tsconfig.json) */
+  project?: string;
+  /** Show detailed output */
+  verbose?: boolean;
+  /** Suppress all output except errors */
+  quiet?: boolean;
+}
+
+/**
+ * Configuration that can be specified in package.json under "thinkwell.build".
+ */
+export interface PackageJsonBuildConfig {
+  /** Glob patterns for files that should receive @JSONSchema transformation */
+  include?: string[];
+  /** Glob patterns for files that should NOT receive @JSONSchema transformation */
+  exclude?: string[];
+}
+
+// ============================================================================
+// Package.json Configuration
+// ============================================================================
+
+/**
+ * Read build configuration from package.json in the given directory.
+ * Returns undefined if no configuration is found.
+ */
+function readPackageJsonConfig(dir: string): PackageJsonBuildConfig | undefined {
+  const pkgPath = join(dir, "package.json");
+  if (!existsSync(pkgPath)) {
+    return undefined;
+  }
+
+  try {
+    const content = readFileSync(pkgPath, "utf-8");
+    const pkg = JSON.parse(content);
+
+    const config = pkg?.thinkwell?.build;
+    if (!config || typeof config !== "object") {
+      return undefined;
+    }
+
+    const result: PackageJsonBuildConfig = {};
+
+    if (Array.isArray(config.include)) {
+      result.include = config.include.filter((i: unknown): i is string => typeof i === "string");
+    }
+
+    if (Array.isArray(config.exclude)) {
+      result.exclude = config.exclude.filter((e: unknown): e is string => typeof e === "string");
+    }
+
+    return result;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Create a file filter function from include/exclude glob patterns.
+ *
+ * - If include is specified, only files matching at least one include pattern
+ *   are eligible for transformation.
+ * - If exclude is specified, files matching any exclude pattern are skipped.
+ * - Exclude takes precedence over include.
+ *
+ * Returns undefined if no filtering is needed (no include/exclude configured).
+ */
+function createFileFilter(
+  config: PackageJsonBuildConfig | undefined,
+): ((fileName: string) => boolean) | undefined {
+  if (!config) return undefined;
+
+  const { include, exclude } = config;
+  const hasInclude = include && include.length > 0;
+  const hasExclude = exclude && exclude.length > 0;
+
+  if (!hasInclude && !hasExclude) return undefined;
+
+  return (fileName: string) => {
+    // Exclude takes precedence
+    if (hasExclude) {
+      for (const pattern of exclude) {
+        if (matchesGlob(fileName, pattern)) return false;
+      }
+    }
+
+    // If include is specified, file must match at least one pattern
+    if (hasInclude) {
+      for (const pattern of include) {
+        if (matchesGlob(fileName, pattern)) return true;
+      }
+      return false;
+    }
+
+    return true;
+  };
+}
+
+// ============================================================================
+// Diagnostics Formatting
+// ============================================================================
+
+function formatDiagnostics(diagnostics: readonly ts.Diagnostic[]): string {
+  if (diagnostics.length === 0) return "";
+  return ts.formatDiagnosticsWithColorAndContext(diagnostics, {
+    getCanonicalFileName: (fileName) => fileName,
+    getCurrentDirectory: ts.sys.getCurrentDirectory,
+    getNewLine: () => ts.sys.newLine,
+  });
+}
+
+// ============================================================================
+// Build Command
+// ============================================================================
+
+export async function runBuild(options: BuildOptions): Promise<void> {
+  const cwd = process.cwd();
+  const configPath = options.project
+    ? resolve(cwd, options.project)
+    : resolve(cwd, "tsconfig.json");
+
+  if (!existsSync(configPath)) {
+    console.error(`Error: Cannot find ${options.project ?? "tsconfig.json"}`);
+    console.error("");
+    console.error("  Run this command from a directory with a tsconfig.json,");
+    console.error("  or use --project to specify the path.");
+    process.exit(1);
+  }
+
+  // Read include/exclude globs from package.json
+  const pkgConfig = readPackageJsonConfig(cwd);
+  const fileFilter = createFileFilter(pkgConfig);
+
+  if (options.verbose && pkgConfig) {
+    if (pkgConfig.include) {
+      console.error(`  @JSONSchema include: ${pkgConfig.include.join(", ")}`);
+    }
+    if (pkgConfig.exclude) {
+      console.error(`  @JSONSchema exclude: ${pkgConfig.exclude.join(", ")}`);
+    }
+  }
+
+  // Create the program with the custom CompilerHost
+  const { program, configErrors } = fileFilter
+    ? createThinkwellProgram({ configPath, fileFilter })
+    : createThinkwellProgram(configPath);
+
+  // Report config-level diagnostics
+  if (configErrors.length > 0) {
+    console.error(formatDiagnostics(configErrors));
+    const hasFatal = configErrors.some(
+      (d) => d.category === ts.DiagnosticCategory.Error,
+    );
+    if (hasFatal) {
+      process.exit(1);
+    }
+  }
+
+  // Get pre-emit diagnostics (type errors, etc.)
+  const diagnostics = ts.getPreEmitDiagnostics(program);
+
+  if (diagnostics.length > 0) {
+    console.error(formatDiagnostics(diagnostics));
+  }
+
+  // Emit output files
+  const emitResult = program.emit();
+
+  // Report emit diagnostics
+  if (emitResult.diagnostics.length > 0) {
+    console.error(formatDiagnostics(emitResult.diagnostics));
+  }
+
+  // Count all errors
+  const allDiagnostics = [...diagnostics, ...emitResult.diagnostics];
+  const errorCount = allDiagnostics.filter(
+    (d) => d.category === ts.DiagnosticCategory.Error,
+  ).length;
+
+  if (errorCount > 0) {
+    console.error("");
+    console.error(
+      `Found ${errorCount} error${errorCount === 1 ? "" : "s"}.`,
+    );
+    process.exit(1);
+  }
+
+  if (!options.quiet) {
+    const fileCount = program.getSourceFiles().filter(
+      (sf) => !sf.fileName.includes("node_modules") && !sf.fileName.includes("/lib/lib."),
+    ).length;
+    console.error(
+      styleText("green", "✔") +
+      ` Build complete (${fileCount} file${fileCount === 1 ? "" : "s"})`,
+    );
+  }
+}
+
+// ============================================================================
+// Argument Parsing
+// ============================================================================
+
+export function parseBuildArgs(args: string[]): BuildOptions {
+  const options: BuildOptions = {};
+
+  let i = 0;
+  while (i < args.length) {
+    const arg = args[i];
+
+    if (arg === "-p" || arg === "--project") {
+      i++;
+      if (i >= args.length) {
+        throw new Error("Missing value for --project");
+      }
+      options.project = args[i];
+    } else if (arg === "--verbose") {
+      options.verbose = true;
+    } else if (arg === "--quiet" || arg === "-q") {
+      options.quiet = true;
+    } else if (arg.startsWith("-")) {
+      throw new Error(`Unknown option: ${arg}`);
+    } else {
+      throw new Error(
+        `Unexpected argument: ${arg}\n\n` +
+        `  "thinkwell build" compiles the project using tsconfig.json.\n` +
+        `  It does not take an entry file argument.\n\n` +
+        `  Did you mean "thinkwell bundle ${arg}"?`
+      );
+    }
+    i++;
+  }
+
+  return options;
+}
+
+// ============================================================================
+// Help
+// ============================================================================
+
+export function showBuildHelp(): void {
+  console.log(`
+thinkwell build - Compile TypeScript with @JSONSchema transformation
+
+Usage:
+  thinkwell build [options]
+
+Options:
+  -p, --project <path>   Path to tsconfig.json (default: ./tsconfig.json)
+  -q, --quiet            Suppress all output except errors
+  --verbose              Show detailed build output
+  -h, --help             Show this help message
+
+Description:
+  Compiles your TypeScript project using the standard TypeScript compiler
+  with a custom CompilerHost that applies @JSONSchema namespace injection
+  in memory. Your source files are never modified.
+
+  Output (.js, .d.ts, source maps) is written to the outDir configured
+  in your tsconfig.json.
+
+Examples:
+  thinkwell build                     Build the project
+  thinkwell build -p tsconfig.app.json   Use a specific tsconfig
+  thinkwell build --quiet             Suppress success output (for CI)
+
+Configuration via package.json:
+  Control which files receive @JSONSchema transformation:
+
+    {
+      "thinkwell": {
+        "build": {
+          "include": ["src/**/*.ts"],
+          "exclude": ["**/*.test.ts", "**/__fixtures__/**"]
+        }
+      }
+    }
+
+  Files not matched by include (or matched by exclude) are still compiled
+  by TypeScript — they just skip @JSONSchema transformation.
+`);
+}
