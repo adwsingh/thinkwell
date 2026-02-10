@@ -89,6 +89,7 @@ ${cyanBold("thinkwell")} - ${whiteBold("agent scripting made easy 🖋️")}
 ${greenBold("Usage:")}
   ${cyanBold("thinkwell")} ${cyan("<script.ts> [args...]")}     Run a TypeScript script
   ${cyanBold("thinkwell run")} ${cyan("<script.ts> [args...]")} Explicit run command
+  ${cyanBold("thinkwell check")}                         Type-check project (no output files)
   ${cyanBold("thinkwell build")}                         Compile project with @JSONSchema support
   ${cyanBold("thinkwell bundle")} ${cyan("<script.ts>")}        Compile to standalone executable
   ${cyanBold("thinkwell")} ${cyan("--help")}                    Show this help message
@@ -129,6 +130,30 @@ async function runBuildCommand(args) {
   try {
     const options = parseBuildArgs(args);
     await runBuild(options);
+  } catch (error) {
+    console.error(`Error: ${error.message}`);
+    process.exit(1);
+  }
+}
+
+/**
+ * Run the check command (type-check with @JSONSchema transformation, no emit).
+ */
+async function runCheckCommand(args) {
+  // Check for help flag
+  if (args.includes("--help") || args.includes("-h")) {
+    const { showCheckHelp } = require("../../dist/cli/check.js");
+    showCheckHelp();
+    return;
+  }
+
+  // Import and run the check command
+  // Path: src/cli/ -> ../../dist/cli/check.js
+  const { parseCheckArgs, runCheck } = require("../../dist/cli/check.js");
+
+  try {
+    const options = parseCheckArgs(args);
+    await runCheck(options);
   } catch (error) {
     console.error(`Error: ${error.message}`);
     process.exit(1);
@@ -318,6 +343,12 @@ async function main() {
   // Handle "build" subcommand — tsc-based build with @JSONSchema transformation
   if (args[0] === "build") {
     await runBuildCommand(args.slice(1));
+    process.exit(0);
+  }
+
+  // Handle "check" subcommand — type-check with @JSONSchema transformation (no emit)
+  if (args[0] === "check") {
+    await runCheckCommand(args.slice(1));
     process.exit(0);
   }
 

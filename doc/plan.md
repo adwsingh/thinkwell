@@ -15,13 +15,13 @@ Implement `thinkwell check` per [the RFD](rfd/check-command.md). The custom Comp
 
 ### Check Command
 
-- [ ] Create `packages/thinkwell/src/cli/check.ts` implementing the check logic:
+- [x] Create `packages/thinkwell/src/cli/check.ts` implementing the check logic:
   - Parse `--package`/`-p` and `--pretty`/`--no-pretty` flags
   - Single-package path: resolve `tsconfig.json`, call `createThinkwellProgram()`, run `getPreEmitDiagnostics()`, format and print diagnostics
   - Workspace path: detect workspace, resolve packages, iterate and check each
   - Exit codes: 0 (pass), 1 (type errors), 2 (config error)
   - Diagnostic output formatting matching the RFD examples (`Checking <pkg>... ok` / error details / summary)
-- [ ] Wire `check` subcommand into `main.cjs` command routing
+- [x] Wire `check` subcommand into `main.cjs` command routing
 
 ### Integration Tests
 
