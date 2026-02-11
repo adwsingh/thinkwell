@@ -1,13 +1,16 @@
 /**
- * CLI command for initializing a new thinkwell project.
+ * CLI command for creating a new thinkwell project in a new directory.
  *
  * This command scaffolds a new project with the necessary configuration
- * and example files. It does not require Bun to run.
+ * and example files.
+ *
+ * Following Cargo's design: "new" creates a new directory, while "init"
+ * modifies existing state in the current directory.
  */
 
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
-import { basename, join, resolve } from "node:path";
-import { cyan, cyanBold, greenBold, whiteBold, dim } from "./fmt.js";
+import { join, resolve } from "node:path";
+import { cyan, cyanBold, greenBold, whiteBold, dim, redBold } from "./fmt.js";
 
 interface InitOptions {
   name: string;
@@ -96,17 +99,16 @@ function createProject(options: InitOptions): void {
 
 function showHelp(): void {
   console.log(`
-${cyanBold("thinkwell init")} - ${whiteBold("Initialize a new thinkwell project")}
+${cyanBold("thinkwell new")} - ${whiteBold("Create a new thinkwell project in a new directory")}
 
 ${greenBold("Usage:")}
-  ${cyanBold("thinkwell init")} ${cyan("[project-name]")}
+  ${cyanBold("thinkwell new")} ${cyan("<project-name>")}
 
 ${greenBold("Arguments:")}
-  ${cyan("project-name")}    Name of the project directory ${dim("(default: current directory)")}
+  ${cyan("project-name")}    Name of the project directory ${dim("(required)")}
 
 ${greenBold("Examples:")}
-  ${cyanBold("thinkwell init")} ${cyan("my-agent")}      Create a new project in ./my-agent
-  ${cyanBold("thinkwell init")}               Initialize in the current directory
+  ${cyanBold("thinkwell new")} ${cyan("my-agent")}      Create a new project in ./my-agent
 
 ${greenBold("This command creates:")}
   - package.json with thinkwell dependency
@@ -114,20 +116,35 @@ ${greenBold("This command creates:")}
   - src/main.ts with example agent code
   - .gitignore
   - .env.example
-`);
+
+${greenBold("To initialize the current directory instead:")}
+  ${cyanBold("thinkwell init")}
+`.trim() + "\n");
 }
 
-export async function runInit(args: string[]): Promise<void> {
+export async function runNew(args: string[]): Promise<void> {
   // Check for help flag
   if (args.includes("--help") || args.includes("-h")) {
     showHelp();
     return;
   }
 
-  // Get project name from args or use current directory
+  // Get project name from args - required
   const projectArg = args.find((arg) => !arg.startsWith("-"));
-  const targetDir = projectArg ? resolve(projectArg) : process.cwd();
-  const name = projectArg || basename(process.cwd());
+
+  if (!projectArg) {
+    console.error(`${redBold("Error:")} Project name is required.`);
+    console.error("");
+    console.error("Usage:");
+    console.error(`  ${cyanBold("thinkwell new")} ${cyan("<project-name>")}`);
+    console.error("");
+    console.error("To initialize the current directory instead:");
+    console.error(`  ${cyanBold("thinkwell init")}`);
+    process.exit(1);
+  }
+
+  const targetDir = resolve(projectArg);
+  const name = projectArg;
 
   // Check if directory exists and is not empty
   if (existsSync(targetDir)) {
@@ -135,7 +152,7 @@ export async function runInit(args: string[]): Promise<void> {
     const existingFiles = files.filter((f) => existsSync(join(targetDir, f)));
 
     if (existingFiles.length > 0) {
-      console.error(`Error: Directory already contains project files:`);
+      console.error(`${redBold("Error:")} Directory already contains project files:`);
       for (const file of existingFiles) {
         console.error(`  - ${file}`);
       }
@@ -145,26 +162,17 @@ export async function runInit(args: string[]): Promise<void> {
     }
   }
 
-  console.log(`Creating thinkwell project in ${targetDir}...`);
+  console.log(`${greenBold("Creating")} thinkwell project in ${targetDir}...`);
   console.log("");
 
   createProject({ name, targetDir });
 
-  console.log("Created files:");
-  console.log("  - package.json");
-  console.log("  - tsconfig.json");
-  console.log("  - src/main.ts");
-  console.log("  - .gitignore");
-  console.log("  - .env.example");
+  console.log(greenBold("Next steps:"));
   console.log("");
-  console.log("Next steps:");
-  console.log("");
-  if (projectArg) {
-    console.log(`  cd ${projectArg}`);
-  }
-  console.log("  npm install        # or: bun install");
-  console.log("  cp .env.example .env");
-  console.log("  # Edit .env to configure your agent");
-  console.log("  thinkwell src/main.ts");
+  console.log(`  ${cyanBold("cd")} ${cyan(projectArg)}`);
+  console.log(`  ${cyanBold("npm install")}        ${dim("# or: pnpm install")}`);
+  console.log(`  ${cyanBold("cp")} ${cyan(".env.example .env")}`);
+  console.log(`  ${dim("# Edit .env to configure your agent")}`);
+  console.log(`  ${cyanBold("thinkwell")} ${cyan("src/main.ts")}`);
   console.log("");
 }
