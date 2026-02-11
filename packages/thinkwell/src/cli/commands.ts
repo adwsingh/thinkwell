@@ -5,9 +5,20 @@
  * utility functions shared between the two CLI entry points:
  *   - src/cli/main.cjs (compiled binary, CommonJS)
  *   - bin/thinkwell (npm distribution, ESM)
+ *
+ * IMPORTANT: This module must remain self-contained (no local imports)
+ * because main.cjs loads it via require() inside the pkg snapshot,
+ * where ESM import resolution for sibling modules fails.
  */
 
-import { cyan, cyanBold, greenBold, whiteBold, redBold, dim } from "./fmt.js";
+import { styleText } from "node:util";
+
+const cyan = (t: string) => styleText("cyan", t);
+const cyanBold = (t: string) => styleText(["cyan", "bold"], t);
+const greenBold = (t: string) => styleText(["green", "bold"], t);
+const whiteBold = (t: string) => styleText(["white", "bold"], t);
+const redBold = (t: string) => styleText(["red", "bold"], t);
+const dim = (t: string) => styleText("dim", t);
 
 /**
  * Print the main help screen to stdout.
