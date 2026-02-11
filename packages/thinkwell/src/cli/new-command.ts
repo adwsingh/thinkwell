@@ -119,7 +119,7 @@ ${greenBold("This command creates:")}
 
 ${greenBold("To initialize the current directory instead:")}
   ${cyanBold("thinkwell init")}
-`);
+`.trim() + "\n");
 }
 
 export async function runNew(args: string[]): Promise<void> {
@@ -162,24 +162,17 @@ export async function runNew(args: string[]): Promise<void> {
     }
   }
 
-  console.log(`Creating thinkwell project in ${targetDir}...`);
+  console.log(`${greenBold("Creating")} thinkwell project in ${targetDir}...`);
   console.log("");
 
   createProject({ name, targetDir });
 
-  console.log("Created files:");
-  console.log("  - package.json");
-  console.log("  - tsconfig.json");
-  console.log("  - src/main.ts");
-  console.log("  - .gitignore");
-  console.log("  - .env.example");
+  console.log(greenBold("Next steps:"));
   console.log("");
-  console.log("Next steps:");
-  console.log("");
-  console.log(`  cd ${projectArg}`);
-  console.log("  npm install        # or: pnpm install");
-  console.log("  cp .env.example .env");
-  console.log("  # Edit .env to configure your agent");
-  console.log("  thinkwell src/main.ts");
+  console.log(`  ${cyanBold("cd")} ${cyan(projectArg)}`);
+  console.log(`  ${cyanBold("npm install")}        ${dim("# or: pnpm install")}`);
+  console.log(`  ${cyanBold("cp")} ${cyan(".env.example .env")}`);
+  console.log(`  ${dim("# Edit .env to configure your agent")}`);
+  console.log(`  ${cyanBold("thinkwell")} ${cyan("src/main.ts")}`);
   console.log("");
 }
