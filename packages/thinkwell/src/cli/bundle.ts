@@ -1592,5 +1592,5 @@ ${greenBold("Configuration via package.json:")}
 
 ${dim("Note: Binaries are ~70-90 MB due to the embedded Node.js runtime.")}
 ${dim("      Use --minify to reduce bundle size (though Node.js runtime dominates).")}
-`);
+`.trim() + "\n");
 }

@@ -7,7 +7,7 @@
  *   - bin/thinkwell (npm distribution, ESM)
  */
 
-import { cyan, cyanBold, greenBold, whiteBold, redBold } from "./fmt.js";
+import { cyan, cyanBold, greenBold, whiteBold, redBold, dim } from "./fmt.js";
 
 /**
  * Print the main help screen to stdout.
@@ -17,11 +17,11 @@ export function showMainHelp(): void {
 ${cyanBold("thinkwell")} - ${whiteBold("agent scripting made easy ✨🖋️")}
 
 ${greenBold("Usage:")}
-  ${cyanBold("thinkwell")} ${cyan("<script.ts> [args...]")}     Run a TypeScript script
-  ${cyanBold("thinkwell run")} ${cyan("<script.ts> [args...]")} Explicit run command
-  ${cyanBold("thinkwell check")}                         Type-check project (no output files)
-  ${cyanBold("thinkwell build")}                         Compile project with @JSONSchema support
-  ${cyanBold("thinkwell bundle")} ${cyan("<script.ts>")}        Compile to standalone executable
+  ${cyanBold("thinkwell")} ${dim("<script.ts> [args...]")}     Run a TypeScript script
+  ${cyanBold("thinkwell run")} ${dim("<script.ts> [args...]")} Explicit run command
+  ${cyanBold("thinkwell check")}                     Type-check project ${dim("(no output files)")}
+  ${cyanBold("thinkwell build")}                     Compile project with @JSONSchema support
+  ${cyanBold("thinkwell bundle")} ${dim("<script.ts>")}        Compile to standalone executable
   ${cyanBold("thinkwell")} ${cyan("--help")}                    Show this help message
   ${cyanBold("thinkwell")} ${cyan("--version")}                 Show version
 

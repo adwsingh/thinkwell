@@ -15,6 +15,7 @@ import { resolve, join, matchesGlob } from "node:path";
 import { styleText } from "node:util";
 import { createThinkwellProgram, createThinkwellWatchHost } from "./compiler-host.js";
 import { cyan, cyanBold, greenBold, whiteBold, dim } from "./fmt.js";
+import { fmtError } from "./commands.js";
 
 // ============================================================================
 // Types
@@ -147,7 +148,7 @@ export async function runBuild(options: BuildOptions): Promise<void> {
     : resolve(cwd, "tsconfig.json");
 
   if (!existsSync(configPath)) {
-    console.error(`Error: Cannot find ${options.project ?? "tsconfig.json"}`);
+    console.error(fmtError(`Cannot find ${options.project ?? "tsconfig.json"}`));
     console.error("");
     console.error("  Run this command from a directory with a tsconfig.json,");
     console.error("  or use --project to specify the path.");
@@ -334,10 +335,10 @@ ${greenBold("Description:")}
   in your tsconfig.json.
 
 ${greenBold("Examples:")}
-  ${cyanBold("thinkwell build")}                        Build the project
-  ${cyanBold("thinkwell build")} ${cyan("--watch")}                Watch and rebuild on changes
-  ${cyanBold("thinkwell build")} ${cyan("-p tsconfig.app.json")}   Use a specific tsconfig
-  ${cyanBold("thinkwell build")} ${cyan("--quiet")}                Suppress success output ${dim("(for CI)")}
+  ${cyanBold("thinkwell build")}                         Build the project
+  ${cyanBold("thinkwell build")} ${cyan("--watch")}                 Watch and rebuild on changes
+  ${cyanBold("thinkwell build")} ${cyan("-p")} ${dim("<tsconfig.app.json>")}  Use a specific tsconfig
+  ${cyanBold("thinkwell build")} ${cyan("--quiet")}                 Suppress success output ${dim("(for CI)")}
 
 ${greenBold("Configuration via package.json:")}
   Control which files receive @JSONSchema transformation:
@@ -351,7 +352,7 @@ ${greenBold("Configuration via package.json:")}
       }
     }
 
-  Files not matched by include (or matched by exclude) are still compiled
-  by TypeScript — they just skip @JSONSchema transformation.
-`);
+${dim("Note: Files not matched by include (or matched by exclude) are still")}
+${dim("      compiled by TypeScript — they just skip @JSONSchema transformation.")}
+`.trim() + "\n");
 }

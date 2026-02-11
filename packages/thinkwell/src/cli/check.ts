@@ -308,5 +308,5 @@ ${greenBold("Examples:")}
   ${cyanBold("thinkwell check")} ${cyan("-p acp")}              Check a specific workspace package
   ${cyanBold("thinkwell check")} ${cyan("-p acp -p protocol")}  Check multiple packages
   ${cyanBold("thinkwell check")} ${cyan("--no-pretty")}         Disable colorized output ${dim("(for CI)")}
-`);
+`.trim() + "\n");
 }
