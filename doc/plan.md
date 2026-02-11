@@ -12,13 +12,13 @@ Implementation plan for [RFD: Explicit Configuration Experience](rfd/explicit-co
 
 ## Phase 2: Dependency Check
 
-- [ ] Create `src/cli/dependency-check.ts` module
-- [ ] Implement fast path: check `package.json` for deps directly
-- [ ] Implement slow path: `pnpm why --json` parsing
-- [ ] Implement slow path: `npm why --json` parsing
-- [ ] Implement slow path: `yarn why --json` parsing
-- [ ] Export `checkDependencies()` function
-- [ ] Add unit tests for each package manager's output format
+- [x] Create `src/cli/dependency-check.ts` module
+- [x] Implement fast path: check `package.json` for deps directly
+- [x] Implement slow path: `pnpm why --json` parsing
+- [x] Implement slow path: `npm why --json` parsing
+- [x] Implement slow path: `yarn why --json` parsing
+- [x] Export `checkDependencies()` function
+- [x] Add unit tests for each package manager's output format
 
 ## Phase 3: Error Messages
 
