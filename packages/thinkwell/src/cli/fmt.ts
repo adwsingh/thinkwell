@@ -12,3 +12,4 @@ export const cyanBold = (t: string) => styleText(["cyan", "bold"], t);
 export const greenBold = (t: string) => styleText(["green", "bold"], t);
 export const whiteBold = (t: string) => styleText(["white", "bold"], t);
 export const dim = (t: string) => styleText("dim", t);
+export const redBold = (t: string) => styleText(["red", "bold"], t);
