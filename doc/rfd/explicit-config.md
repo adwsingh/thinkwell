@@ -130,9 +130,15 @@ Run 'thinkwell init' to add the required dependencies, or add them manually:
   yarn add -D typescript
 ```
 
-### The `thinkwell init` Command
+### The `thinkwell init` and `thinkwell new` Commands
 
-A new `thinkwell init` command automates dependency setup:
+These two commands are inspired by Cargo's design philosophy:
+- **`thinkwell init`** — Initialize a project in the current directory (side-effecting operation)
+- **`thinkwell new <name>`** — Create a new project in a new directory (creates new state)
+
+This distinction is intuitive: "init" sounds like it modifies existing state, while "new" sounds like it creates something fresh.
+
+#### `thinkwell init`
 
 ```bash
 thinkwell init
@@ -140,17 +146,21 @@ thinkwell init
 
 **Behavior:**
 
-1. Detect the package manager (using the detection logic above)
-2. Determine which dependencies are missing (thinkwell, typescript, or both)
-3. Add missing dependencies using the detected package manager:
+1. If no `package.json` exists, create one with sensible defaults
+2. Detect the package manager (using the detection logic above)
+3. Determine which dependencies are missing (thinkwell, typescript, or both)
+4. Add missing dependencies using the detected package manager:
    - `thinkwell` as a regular dependency
    - `typescript` as a dev dependency
-4. Use versions matching the current thinkwell CLI binary as defaults
-5. If `tsconfig.json` doesn't exist, offer to create one with sensible defaults
+5. Use versions matching the current thinkwell CLI binary as defaults
+6. If `tsconfig.json` doesn't exist, offer to create one with sensible defaults
 
 **Interactive mode (default when TTY):**
 ```
 $ thinkwell init
+
+No package.json found. Creating one...
+Created package.json
 
 Detected package manager: pnpm
 
@@ -169,10 +179,25 @@ Running: pnpm add -D typescript@^5.7.0
 **Non-interactive mode (CI or `--yes` flag):**
 ```
 $ thinkwell init --yes
+Creating package.json...
 Adding thinkwell@^0.5.0...
 Adding typescript@^5.7.0 as devDependency...
 ✓ Dependencies added successfully.
 ```
+
+#### `thinkwell new <name>`
+
+```bash
+thinkwell new my-agent
+```
+
+**Behavior:**
+
+1. Create a new directory with the given name
+2. Scaffold a complete project structure (package.json, tsconfig.json, src/main.ts, .gitignore, etc.)
+3. The user then runs `cd my-agent && npm install` (or pnpm/yarn)
+
+This command **requires** a project name argument — it always creates a new directory. To initialize the current directory, use `thinkwell init` instead.
 
 ### Why Option C?
 
@@ -210,6 +235,7 @@ src/cli/
 ├── package-manager.ts    # Package manager detection and command generation
 ├── dependency-check.ts   # Hybrid dependency resolution logic
 ├── init.ts               # `thinkwell init` command implementation
+├── new-command.ts        # `thinkwell new` command implementation
 ├── check.ts              # Updated to use dependency-check
 └── build.ts              # Updated to use dependency-check
 ```
