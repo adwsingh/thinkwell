@@ -640,8 +640,8 @@ export class ThinkBuilder<Output> {
       await this._conn.mcpHandler.waitForToolsDiscovery(sessionId, 2000);
 
       try {
-        // Send the prompt
-        await session.sendPrompt(prompt);
+        // Start the prompt without awaiting - we need to read updates concurrently
+        const promptPromise = session.sendPrompt(prompt);
 
         // Read updates, forwarding events to the stream and watching for result
         while (!resultReceived) {
@@ -657,6 +657,9 @@ export class ThinkBuilder<Output> {
           // Forward the event to stream consumers
           stream.pushEvent(update);
         }
+
+        // Wait for the prompt to complete (it should already be done since we got a stop)
+        await promptPromise;
 
         if (resultReceived && result !== undefined) {
           stream.resolveResult(result);

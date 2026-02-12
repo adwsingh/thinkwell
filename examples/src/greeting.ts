@@ -25,9 +25,9 @@ async function main() {
   const agent = await open('claude');
 
   try {
-    const stopSpinner = startSpinner('Thinking...');
+    const spinner = startSpinner('Thinking...');
 
-    const greeting = await agent
+    const thoughts = await agent
       .think(Greeting.Schema)
       .text(`
         Use the current_time tool to get the current time, and create a
@@ -47,10 +47,24 @@ async function main() {
           };
         }
       )
+      .stream();
 
-      .run();
+    let first = true;
+    for await (const thought of thoughts) {
+      if (thought.type === 'message') {
+        if (first && thought.text.trim() === '') {
+          continue;
+        } else if (first) {
+          spinner.setMessage(thought.text.trimStart());
+          first = false;
+        } else {
+          spinner.appendMessage(thought.text);
+        }
+      }
+    }
+    const greeting = await thoughts.result;
 
-    stopSpinner();
+    spinner.stop();
     console.log(styleText(["bold", "white"], `✨ ${greeting.message}`));
   } catch (error) {
     console.error("Error:", error);
