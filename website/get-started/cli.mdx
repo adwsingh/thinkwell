@@ -10,12 +10,16 @@ The `thinkwell` CLI is the primary way to run and build Thinkwell agent scripts.
 ```bash
 thinkwell <script.ts> [args...]     # Run a TypeScript script
 thinkwell run <script.ts> [args...] # Explicit run command
-thinkwell build <script.ts>         # Compile to standalone executable
+thinkwell init                      # Initialize thinkwell in current directory
+thinkwell new <project-name>        # Create a new project in a new directory
+thinkwell check                     # Type-check project (no output files)
+thinkwell build                     # Compile project with @JSONSchema support
+thinkwell bundle <script.ts>        # Compile to standalone executable
 thinkwell --help                    # Show help message
 thinkwell --version                 # Show version
 ```
 
-## Running Scripts
+## Running Scripts (Zero-Config)
 
 The simplest way to run a Thinkwell script is to pass it directly to the CLI:
 
@@ -39,12 +43,137 @@ The explicit `run` subcommand is equivalent to passing a script directly:
 thinkwell run my-agent.ts --input data.json
 ```
 
-## Building Executables
+## Project Setup
+
+### `thinkwell init`
+
+Initialize thinkwell in an existing directory:
+
+```bash
+thinkwell init
+```
+
+This command:
+1. Creates `package.json` if none exists
+2. Adds `thinkwell` and `typescript` dependencies using the detected package manager (pnpm, yarn, or npm)
+
+Options:
+- `--yes, -y` - Proceed without prompting for confirmation (CI-friendly)
+
+### `thinkwell new`
+
+Create a new project in a new directory:
+
+```bash
+thinkwell new my-agent
+```
+
+This creates a new directory with:
+- `package.json` with thinkwell dependency
+- `tsconfig.json` for TypeScript
+- `src/main.ts` with example agent code
+- `.gitignore`
+- `.env.example`
+
+## Type Checking
+
+### `thinkwell check`
+
+Check a project for type errors:
+
+```bash
+thinkwell check
+```
+
+This will essentially perform the same type checking as `thinkwell build` without writing any output files, which is faster for catching errors during development. In a workspace (pnpm or npm), all TypeScript packages are checked by default.
+
+| Option | Description |
+|--------|-------------|
+| `-p, --package <name>` | Check a specific workspace package (can be repeated) |
+| `--pretty` | Enable colorized output (default: true if TTY) |
+| `--no-pretty` | Disable colorized output |
+
+Exit codes:
+- `0` - No type errors
+- `1` - Type errors found
+- `2` - Configuration error
+
+### Examples
+
+```bash
+# Check the current project
+thinkwell check
+
+# Check a specific workspace package
+thinkwell check -p acp
+
+# Check multiple packages
+thinkwell check -p acp -p protocol
+
+# Disable colorized output (for CI)
+thinkwell check --no-pretty
+```
+
+## Building Projects
+
+### `thinkwell build`
+
+Compile your TypeScript project using the standard TypeScript compiler with `@JSONSchema` namespace injection:
+
+```bash
+thinkwell build
+```
+
+This command compiles your project according to your `tsconfig.json`, applying `@JSONSchema` transformations first. Output (`.js`, `.d.ts`, source maps) is written to your configured `outDir`.
+
+| Option | Description |
+|--------|-------------|
+| `-w, --watch` | Watch for file changes and recompile |
+| `-p, --project <path>` | Path to tsconfig.json (default: `./tsconfig.json`) |
+| `-q, --quiet` | Suppress all output except errors |
+| `--verbose` | Show detailed build output |
+
+### Examples
+
+```bash
+# Build the project
+thinkwell build
+
+# Watch and rebuild on changes
+thinkwell build --watch
+
+# Use a specific tsconfig
+thinkwell build -p tsconfig.app.json
+
+# Suppress success output (for CI)
+thinkwell build --quiet
+```
+
+### Configuration via package.json
+
+Control which files receive `@JSONSchema` transformation:
+
+```json
+{
+  "thinkwell": {
+    "build": {
+      "include": ["src/**/*.ts"],
+      "exclude": ["**/*.test.ts", "**/__fixtures__/**"]
+    }
+  }
+}
+```
+
+Files not matched by `include` (or matched by `exclude`) are still compiled by TypeScript—they just skip `@JSONSchema` transformation.
+
+## Bundling Executables
+
+### `thinkwell bundle`
 
 Compile your script into a standalone executable that can run without Node.js or Thinkwell installed:
 
 ```bash
-thinkwell build src/agent.ts
+thinkwell bundle src/agent.ts
 ```
 
 The resulting binary includes:
@@ -52,7 +181,7 @@ The resulting binary includes:
 - All thinkwell packages
 - Your bundled application code
 
-### Build Options
+### Bundle Options
 
 | Option | Description |
 |--------|-------------|
@@ -79,39 +208,39 @@ The resulting binary includes:
 ### Examples
 
 ```bash
-# Build for current platform
-thinkwell build src/agent.ts
+# Bundle for current platform
+thinkwell bundle src/agent.ts
 
 # Specify output path
-thinkwell build src/agent.ts -o dist/my-agent
+thinkwell bundle src/agent.ts -o dist/my-agent
 
-# Build for Linux
-thinkwell build src/agent.ts --target linux-x64
+# Bundle for Linux
+thinkwell bundle src/agent.ts --target linux-x64
 
 # Multi-platform build
-thinkwell build src/agent.ts -t darwin-arm64 -t linux-x64
+thinkwell bundle src/agent.ts -t darwin-arm64 -t linux-x64
 
 # Preview build without executing
-thinkwell build src/agent.ts --dry-run
+thinkwell bundle src/agent.ts --dry-run
 
 # Keep sqlite3 as external dependency
-thinkwell build src/agent.ts -e sqlite3
+thinkwell bundle src/agent.ts -e sqlite3
 
 # Minify for smaller binary
-thinkwell build src/agent.ts --minify
+thinkwell bundle src/agent.ts --minify
 
 # Watch mode for development
-thinkwell build src/agent.ts --watch
+thinkwell bundle src/agent.ts --watch
 ```
 
 ### Configuration via package.json
 
-Set build defaults in your `package.json`:
+Set bundle defaults in your `package.json`:
 
 ```json
 {
   "thinkwell": {
-    "build": {
+    "bundle": {
       "output": "dist/my-agent",
       "targets": ["darwin-arm64", "linux-x64"],
       "external": ["sqlite3"],
@@ -131,6 +260,30 @@ Binaries are approximately 70-90 MB due to the embedded Node.js runtime. The `--
 
 | Variable | Description |
 |----------|-------------|
-| `THINKWELL_AGENT_CMD` | Default command to connect to an agent backend |
+| `THINKWELL_AGENT` | Override the agent name (see [supported names](#supported-agent-names)) |
+| `THINKWELL_AGENT_CMD` | Override the agent command (e.g., `myagent --acp`) |
 | `THINKWELL_CACHE_DIR` | Override the cache directory (default: `~/.cache/thinkwell`) |
 | `DEBUG` | Enable debug output for troubleshooting |
+
+The agent environment variables let you swap agents at runtime without modifying code. For example, a script that calls `open('claude')` can be run with a different agent:
+
+```bash
+# Run with OpenCode instead of Claude
+THINKWELL_AGENT=opencode thinkwell my-script.ts
+
+# Run with a custom agent command
+THINKWELL_AGENT_CMD="myagent --acp" thinkwell my-script.ts
+```
+
+If both are set, `THINKWELL_AGENT_CMD` takes precedence.
+
+### Supported Agent Names
+
+| Name | Command |
+|------|---------|
+| `claude` | `npx -y @zed-industries/claude-code-acp` |
+| `codex` | `npx -y @zed-industries/codex-acp` |
+| `gemini` | `npx -y @google/gemini-cli --experimental-acp` |
+| `kiro` | `kiro-cli acp` |
+| `opencode` | `opencode acp` |
+| `auggie` | `auggie --acp` |

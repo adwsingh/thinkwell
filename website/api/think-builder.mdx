@@ -126,6 +126,96 @@ The schema serves three purposes:
 2. Validates incoming calls at runtime
 3. Provides TypeScript typing for your handler
 
+## Skill Methods
+
+Skills let you give the agent reusable, self-contained capabilities following the [Agent Skills standard](https://agentskills.io/). Skills support progressive disclosure — only metadata is loaded initially, with full instructions loaded on demand when the agent activates a skill.
+
+### `.skill(path)` - Stored Skill
+
+Load a skill from a `SKILL.md` file on disk.
+
+```typescript
+.skill("./skills/code-review")
+```
+
+The file is parsed at `run()` time. The skill directory must contain a `SKILL.md` with YAML frontmatter:
+
+```yaml
+---
+name: code-review
+description: Reviews code for bugs, style issues, and best practices.
+---
+
+# Code Review
+
+## Steps
+1. Read the files to review
+2. Identify bugs, style issues, and improvement opportunities
+...
+```
+
+Reference files and assets in the skill directory can be accessed via the `read_skill_file` tool.
+
+### `.skill(definition)` - Virtual Skill
+
+Define a skill programmatically without filesystem artifacts.
+
+```typescript
+.skill({
+  name: "test-writer",
+  description: "Generates unit tests for TypeScript functions.",
+  body: `
+# Test Writer
+
+## Steps
+1. Analyze the function signature and behavior
+2. Generate comprehensive test cases
+3. Use the \`count-assertions\` tool to verify coverage
+
+## Available Tools
+
+### count-assertions
+Count assertions in a test file.
+Input: \`{ "path": "string" }\`
+  `,
+  tools: [{
+    name: "count-assertions",
+    description: "Count assertions in a test file",
+    handler: async ({ path }) => {
+      const content = await fs.readFile(path, "utf-8");
+      const matches = content.match(/expect\(/g) || [];
+      return { count: matches.length };
+    },
+  }],
+})
+```
+
+Virtual skills can include handler functions via the `tools` array. These are invoked through the `call_skill_tool` dispatcher — they don't appear as individual MCP tools, preserving progressive disclosure.
+
+### Skill Name Rules
+
+Skill names must follow the Agent Skills spec:
+- 1-64 characters
+- Lowercase alphanumeric plus hyphens
+- No leading, trailing, or consecutive hyphens
+
+### Multiple Skills
+
+You can attach multiple skills to a single prompt:
+
+```typescript
+const result = await agent
+  .think(OutputSchema)
+  .skill("./skills/code-review")
+  .skill({
+    name: "test-writer",
+    description: "Generates unit tests.",
+    body: "...",
+  })
+  .text("Review the auth module and write tests for any issues found")
+  .run();
+```
+
 ## Configuration Methods
 
 ### `.cwd(path)`
@@ -149,6 +239,154 @@ const result = await agent
   .run();
 // result is typed according to OutputSchema
 ```
+
+### `.stream()`
+
+Executes the prompt and returns a `ThoughtStream` — a handle providing both the final typed result and an async iterable of intermediate progress events.
+
+```typescript
+const stream = agent
+  .think(OutputSchema)
+  .text("Analyze this codebase")
+  .stream();
+
+// Iterate over events as they arrive
+for await (const event of stream) {
+  if (event.type === "thought") {
+    process.stderr.write(event.text);
+  }
+}
+
+// Get the final result
+const result = await stream.result;
+```
+
+Execution begins eagerly when `stream()` is called — you don't need to iterate to start the operation.
+
+## ThoughtStream
+
+The `ThoughtStream<Output>` class provides access to streaming events during prompt execution.
+
+### Properties
+
+#### `.result`
+
+A `Promise<Output>` that resolves with the final typed result.
+
+```typescript
+const stream = agent.think(schema).text("...").stream();
+const result = await stream.result;
+```
+
+### Async Iteration
+
+`ThoughtStream` implements `AsyncIterable<ThoughtEvent>`, allowing you to iterate over events with `for await`:
+
+```typescript
+for await (const event of stream) {
+  switch (event.type) {
+    case "thought":
+      ui.updateThinking(event.text);
+      break;
+    case "tool_start":
+      ui.showToolActivity(event.title, event.kind);
+      break;
+    case "tool_done":
+      ui.clearToolActivity(event.id);
+      break;
+    case "plan":
+      ui.renderPlan(event.entries);
+      break;
+  }
+}
+```
+
+### Execution Semantics
+
+The async iterator and result promise have independent lifecycles:
+
+- **Iterate without awaiting `.result`** — the result resolves in the background
+- **Await `.result` without iterating** — events buffer internally
+- **Do both concurrently** — iterate and await simultaneously
+- **Early termination** — break out of the loop and still await `.result`
+
+```typescript
+const stream = agent.think(schema).text("...").stream();
+
+for await (const event of stream) {
+  if (event.type === "thought") {
+    process.stderr.write(event.text);
+  }
+  if (someCondition) break; // Early exit is safe
+}
+
+// Result is still available after breaking
+const result = await stream.result;
+```
+
+## ThoughtEvent Types
+
+Events emitted during streaming are represented as a discriminated union:
+
+### `thought`
+
+Streaming internal reasoning / chain-of-thought from the agent.
+
+```typescript
+{ type: "thought"; text: string }
+```
+
+### `message`
+
+Streaming visible response text from the agent.
+
+```typescript
+{ type: "message"; text: string }
+```
+
+### `tool_start`
+
+Emitted when the agent starts using a tool.
+
+```typescript
+{ type: "tool_start"; id: string; title: string; kind?: ToolKind }
+```
+
+The `kind` field indicates the category of tool: `"read"`, `"edit"`, `"delete"`, `"move"`, `"search"`, `"execute"`, `"think"`, `"fetch"`, `"switch_mode"`, or `"other"`.
+
+### `tool_update`
+
+Emitted during tool execution with progress or intermediate content.
+
+```typescript
+{ type: "tool_update"; id: string; status: string; content?: ToolContent[] }
+```
+
+The `content` array may include:
+- `{ type: "content"; content: ContentBlock }` — text, image, or resource link
+- `{ type: "diff"; path: string; oldText: string; newText: string }` — file diff
+- `{ type: "terminal"; terminalId: string }` — terminal output reference
+
+### `tool_done`
+
+Emitted when a tool completes.
+
+```typescript
+{ type: "tool_done"; id: string; status: "completed" | "failed" }
+```
+
+### `plan`
+
+Emitted when the agent shares its execution plan.
+
+```typescript
+{ type: "plan"; entries: PlanEntry[] }
+```
+
+Each `PlanEntry` has:
+- `content: string` — description of the plan step
+- `status: "pending" | "in_progress" | "completed"`
+- `priority: "high" | "medium" | "low"`
 
 ## Complete Example
 
@@ -229,16 +467,25 @@ While most methods can be called in any order, we recommend this sequence for re
 
 1. `.think(schema)` - Always first (starts the builder)
 2. `.cwd(path)` - Configuration
-3. `.text()` / `.textln()` / `.quote()` / `.code()` - Main prompt instructions
-4. `.tool()` - Tool definitions
-5. `.run()` - Always last (executes the prompt)
+3. `.skill()` - Skill attachments
+4. `.text()` / `.textln()` / `.quote()` / `.code()` - Main prompt instructions
+5. `.tool()` - Tool definitions
+6. `.run()` or `.stream()` - Always last (executes the prompt)
 
 ```typescript
 const result = await agent
-  .think(OutputSchema)            // 1. Schema
-  .cwd("/my/project")             // 2. Config
-  .text("Analyze this code:")     // 3. Instructions
+  .think(OutputSchema)               // 1. Schema
+  .cwd("/my/project")                // 2. Config
+  .skill("./skills/code-review")     // 3. Skills
+  .text("Analyze this code:")        // 4. Instructions
   .code(sourceCode, "typescript")
-  .tool("helper", "...", handler) // 4. Tools
-  .run();                         // 5. Execute
+  .tool("helper", "...", handler)    // 5. Tools
+  .run();                            // 6. Execute
+
+// Or with streaming:
+const stream = agent
+  .think(OutputSchema)
+  .skill("./skills/code-review")
+  .text("Analyze this code:")
+  .stream();                         // 6. Execute with streaming
 ```
