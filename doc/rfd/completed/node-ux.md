@@ -1,6 +1,7 @@
 # RFD: Node-Native Developer Experience
 
-**Depends on:** [remove-uri-scheme](remove-uri-scheme.md)
+- **Depends on:** [remove-uri-scheme](remove-uri-scheme.md)
+- **Implementation:** [PR #29](https://github.com/dherman/thinkwell/pull/29)
 
 ## Summary
 

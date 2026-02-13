@@ -1,6 +1,8 @@
 # RFD: Explicit Configuration Experience
 
-**Depends on:** [node-ux](node-ux.md), [check-command](check-command.md)
+- **Depends on:** [node-ux](node-ux.md), [check-command](check-command.md)
+- **Implementation:** [PR #31](https://github.com/dherman/thinkwell/pull/31)
+
 
 ## Summary
 
