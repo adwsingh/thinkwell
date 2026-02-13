@@ -10,7 +10,7 @@
 
 import { open } from "thinkwell";
 import { styleText } from 'node:util';
-import { startSpinner } from "./util/spinner.js";
+import { Status } from "./util/status.js";
 
 /**
  * A friendly greeting.
@@ -25,7 +25,7 @@ async function main() {
   const agent = await open('claude');
 
   try {
-    const spinner = startSpinner('Thinking...');
+    const status = new Status('Thinking...');
 
     const thoughts = await agent
       .think(Greeting.Schema)
@@ -55,16 +55,16 @@ async function main() {
         if (first && thought.text.trim() === '') {
           continue;
         } else if (first) {
-          spinner.setMessage(thought.text.trimStart());
+          status.setMessage(thought.text.trimStart());
           first = false;
         } else {
-          spinner.appendMessage(thought.text);
+          status.appendMessage(thought.text);
         }
       }
     }
     const greeting = await thoughts.result;
 
-    spinner.stop();
+    status.clear();
     console.log(styleText(["bold", "white"], `✨ ${greeting.message}`));
   } catch (error) {
     console.error("Error:", error);
